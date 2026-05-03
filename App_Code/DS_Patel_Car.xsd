@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema id="DS_Shivani" targetNamespace="http://tempuri.org/DS_Shivani.xsd" xmlns:mstns="http://tempuri.org/DS_Shivani.xsd" xmlns="http://tempuri.org/DS_Shivani.xsd" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata" xmlns:msprop="urn:schemas-microsoft-com:xml-msprop" attributeFormDefault="qualified" elementFormDefault="qualified">
+  <xs:annotation>
+    <xs:appinfo source="urn:schemas-microsoft-com:xml-msdatasource">
+      <DataSource DefaultConnectionIndex="0" FunctionsComponentName="QueriesTableAdapter" Modifier="AutoLayout, AnsiClass, Class, Public" SchemaSerializationMode="IncludeSchema" xmlns="urn:schemas-microsoft-com:xml-msdatasource">
+        <Connections />
+        <Tables />
+        <Sources />
+      </DataSource>
+    </xs:appinfo>
+  </xs:annotation>
+  <xs:element name="DS_Shivani" msdata:IsDataSet="true" msdata:UseCurrentLocale="true" msprop:Generator_DataSetName="DS_Shivani" msprop:Generator_UserDSName="DS_Shivani">
+    <xs:complexType>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="dt_gst_invoice" msprop:Generator_TableClassName="dt_gst_invoiceDataTable" msprop:Generator_TableVarName="tabledt_gst_invoice" msprop:Generator_TablePropName="dt_gst_invoice" msprop:Generator_RowDeletingName="dt_gst_invoiceRowDeleting" msprop:Generator_RowChangingName="dt_gst_invoiceRowChanging" msprop:Generator_RowEvHandlerName="dt_gst_invoiceRowChangeEventHandler" msprop:Generator_RowDeletedName="dt_gst_invoiceRowDeleted" msprop:Generator_UserTableName="dt_gst_invoice" msprop:Generator_RowChangedName="dt_gst_invoiceRowChanged" msprop:Generator_RowEvArgName="dt_gst_invoiceRowChangeEvent" msprop:Generator_RowClassName="dt_gst_invoiceRow">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="invoice_no" msprop:Generator_ColumnVarNameInTable="columninvoice_no" msprop:Generator_ColumnPropNameInRow="invoice_no" msprop:Generator_ColumnPropNameInTable="invoice_noColumn" msprop:Generator_UserColumnName="invoice_no" type="xs:string" minOccurs="0" />
+              <xs:element name="invoice_date" msprop:Generator_ColumnVarNameInTable="columninvoice_date" msprop:Generator_ColumnPropNameInRow="invoice_date" msprop:Generator_ColumnPropNameInTable="invoice_dateColumn" msprop:Generator_UserColumnName="invoice_date" type="xs:string" minOccurs="0" />
+              <xs:element name="cust_name" msprop:Generator_ColumnVarNameInTable="columncust_name" msprop:Generator_ColumnPropNameInRow="cust_name" msprop:Generator_ColumnPropNameInTable="cust_nameColumn" msprop:Generator_UserColumnName="cust_name" type="xs:string" minOccurs="0" />
+              <xs:element name="add" msprop:Generator_ColumnVarNameInTable="columnadd" msprop:Generator_ColumnPropNameInRow="add" msprop:Generator_ColumnPropNameInTable="addColumn" msprop:Generator_UserColumnName="add" type="xs:string" minOccurs="0" />
+              <xs:element name="gstin" msprop:Generator_ColumnVarNameInTable="columngstin" msprop:Generator_ColumnPropNameInRow="gstin" msprop:Generator_ColumnPropNameInTable="gstinColumn" msprop:Generator_UserColumnName="gstin" type="xs:string" minOccurs="0" />
+              <xs:element name="gross_amount" msprop:Generator_ColumnVarNameInTable="columngross_amount" msprop:Generator_ColumnPropNameInRow="gross_amount" msprop:Generator_ColumnPropNameInTable="gross_amountColumn" msprop:Generator_UserColumnName="gross_amount" type="xs:double" minOccurs="0" />
+              <xs:element name="GST_Amount" msprop:Generator_ColumnVarNameInTable="columnGST_Amount" msprop:Generator_ColumnPropNameInRow="GST_Amount" msprop:Generator_ColumnPropNameInTable="GST_AmountColumn" msprop:Generator_UserColumnName="GST_Amount" type="xs:double" minOccurs="0" />
+              <xs:element name="Total_Amount" msprop:Generator_ColumnVarNameInTable="columnTotal_Amount" msprop:Generator_ColumnPropNameInRow="Total_Amount" msprop:Generator_ColumnPropNameInTable="Total_AmountColumn" msprop:Generator_UserColumnName="Total_Amount" type="xs:double" minOccurs="0" />
+              <xs:element name="veh_no" msprop:Generator_ColumnVarNameInTable="columnveh_no" msprop:Generator_ColumnPropNameInRow="veh_no" msprop:Generator_ColumnPropNameInTable="veh_noColumn" msprop:Generator_UserColumnName="veh_no" type="xs:string" minOccurs="0" />
+              <xs:element name="amount_in_word" msprop:Generator_ColumnVarNameInTable="columnamount_in_word" msprop:Generator_ColumnPropNameInRow="amount_in_word" msprop:Generator_ColumnPropNameInTable="amount_in_wordColumn" msprop:Generator_UserColumnName="amount_in_word" type="xs:string" minOccurs="0" />
+              <xs:element name="qr_code" msprop:Generator_ColumnVarNameInTable="columnqr_code" msprop:Generator_ColumnPropNameInRow="qr_code" msprop:Generator_ColumnPropNameInTable="qr_codeColumn" msprop:Generator_UserColumnName="qr_code" type="xs:string" minOccurs="0" />
+              <xs:element name="km" msprop:Generator_ColumnVarNameInTable="columnkm" msprop:Generator_ColumnPropNameInRow="km" msprop:Generator_ColumnPropNameInTable="kmColumn" msprop:Generator_UserColumnName="km" type="xs:string" minOccurs="0" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="dt_gst_invoice_detail" msprop:Generator_TableClassName="dt_gst_invoice_detailDataTable" msprop:Generator_TableVarName="tabledt_gst_invoice_detail" msprop:Generator_TablePropName="dt_gst_invoice_detail" msprop:Generator_RowDeletingName="dt_gst_invoice_detailRowDeleting" msprop:Generator_RowChangingName="dt_gst_invoice_detailRowChanging" msprop:Generator_RowEvHandlerName="dt_gst_invoice_detailRowChangeEventHandler" msprop:Generator_RowDeletedName="dt_gst_invoice_detailRowDeleted" msprop:Generator_UserTableName="dt_gst_invoice_detail" msprop:Generator_RowChangedName="dt_gst_invoice_detailRowChanged" msprop:Generator_RowEvArgName="dt_gst_invoice_detailRowChangeEvent" msprop:Generator_RowClassName="dt_gst_invoice_detailRow">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="item_name" msdata:Caption="invoice_no" msprop:Generator_ColumnVarNameInTable="columnitem_name" msprop:Generator_ColumnPropNameInRow="item_name" msprop:Generator_ColumnPropNameInTable="item_nameColumn" msprop:Generator_UserColumnName="item_name" type="xs:string" minOccurs="0" />
+              <xs:element name="Unit_Price" msprop:Generator_ColumnVarNameInTable="columnUnit_Price" msprop:Generator_ColumnPropNameInRow="Unit_Price" msprop:Generator_ColumnPropNameInTable="Unit_PriceColumn" msprop:Generator_UserColumnName="Unit_Price" type="xs:double" minOccurs="0" />
+              <xs:element name="qty" msprop:Generator_ColumnVarNameInTable="columnqty" msprop:Generator_ColumnPropNameInRow="qty" msprop:Generator_ColumnPropNameInTable="qtyColumn" msprop:Generator_UserColumnName="qty" type="xs:double" minOccurs="0" />
+              <xs:element name="gst_amount" msprop:Generator_ColumnVarNameInTable="columngst_amount" msprop:Generator_ColumnPropNameInRow="gst_amount" msprop:Generator_ColumnPropNameInTable="gst_amountColumn" msprop:Generator_UserColumnName="gst_amount" type="xs:double" minOccurs="0" />
+              <xs:element name="total_amount" msprop:Generator_ColumnVarNameInTable="columntotal_amount" msprop:Generator_ColumnPropNameInRow="total_amount" msprop:Generator_ColumnPropNameInTable="total_amountColumn" msprop:Generator_UserColumnName="total_amount" type="xs:double" minOccurs="0" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:choice>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
