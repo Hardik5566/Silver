@@ -14,16 +14,30 @@ public partial class Home : System.Web.UI.Page
 
     private void LoadCounts()
     {
-        DataSet dsParty = BAL_Party.dis_party();
-        lit_count_party.Text = (dsParty.Tables.Count > 0 ? dsParty.Tables[0].Rows.Count : 0).ToString();
+        DataSet ds = BAL_Dashboard.sel_dashboard_counts();
+        if (ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+            return;
 
-        DataSet dsPart = BAL_Part.dis_part("0");
-        lit_count_part.Text = (dsPart.Tables.Count > 0 ? dsPart.Tables[0].Rows.Count : 0).ToString();
+        DataRow r = ds.Tables[0].Rows[0];
+        lit_count_party.Text = r["total_party"].ToString();
+        lit_count_part.Text = r["total_part"].ToString();
 
-        DataSet dsUnit = BAL_Unit.sel_unit_grid();
-        lit_count_unit.Text = (dsUnit.Tables.Count > 0 ? dsUnit.Tables[0].Rows.Count : 0).ToString();
+        lit_count_active_challan.Text = r["total_active_challan"].ToString();
+        lit_count_active_item.Text = r["total_active_item_qty"].ToString();
 
-        DataSet dsUser = BAL_User.dis_user();
-        lit_count_user.Text = (dsUser.Tables.Count > 0 ? dsUser.Tables[0].Rows.Count : 0).ToString();
+        lit_count_today_challan.Text = r["today_challan_received"].ToString();
+        lit_count_today_item.Text = r["today_item_received"].ToString();
+
+        lit_count_month_challan.Text = r["month_challan_received"].ToString();
+        lit_count_month_item.Text = r["month_item_received"].ToString();
+
+        // Right-side quick stats
+        lit_count_today_challan2.Text = lit_count_today_challan.Text;
+        lit_count_today_item2.Text = lit_count_today_item.Text;
+        lit_count_month_challan2.Text = lit_count_month_challan.Text;
+        lit_count_month_item2.Text = lit_count_month_item.Text;
+
+        // Part-wise section removed from UI (counts only).
     }
+
 }

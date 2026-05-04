@@ -1,5 +1,5 @@
 /*
-  Stored procedures only: Party, Unit, Part, User.
+  Stored procedures: Party, Unit, Part, User, Inward/Outward, Invoice.
   Run after: Function.sql, Table.sql
 */
 
@@ -505,6 +505,50 @@ BEGIN
 END
 GO
 
+/* --------------------- Dashboard counts --------------------- */
+IF OBJECT_ID('dbo.sel_dashboard_counts_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_dashboard_counts_sp;
+GO
+CREATE PROCEDURE dbo.sel_dashboard_counts_sp
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @today DATE = CAST(dbo.get_date() AS DATE);
+    DECLARE @monthStart DATE = DATEFROMPARTS(YEAR(@today), MONTH(@today), 1);
+    DECLARE @monthEnd DATE = DATEADD(DAY, 1, EOMONTH(@today));
+
+    SELECT
+        /* Masters */
+        (SELECT COUNT(1) FROM dbo.tbl_party_master WHERE status = 1) AS total_party,
+        (SELECT COUNT(1) FROM dbo.tbl_part_master WHERE status = 1) AS total_part,
+
+        /* Inward challan */
+        (SELECT COUNT(1) FROM dbo.tbl_inward_challan WHERE status = 1) AS total_active_challan,
+        (SELECT ISNULL(SUM(CAST(d.qty_inward AS BIGINT)), 0)
+            FROM dbo.tbl_inward_challan_details d
+            INNER JOIN dbo.tbl_inward_challan h ON h.inward_id = d.inward_id
+            WHERE d.status = 1 AND h.status = 1) AS total_active_item_qty,
+
+        /* Today received */
+        (SELECT COUNT(1)
+            FROM dbo.tbl_inward_challan
+            WHERE status = 1 AND CAST(inward_date AS DATE) = @today) AS today_challan_received,
+        (SELECT ISNULL(SUM(CAST(d.qty_inward AS BIGINT)), 0)
+            FROM dbo.tbl_inward_challan_details d
+            INNER JOIN dbo.tbl_inward_challan h ON h.inward_id = d.inward_id
+            WHERE d.status = 1 AND h.status = 1 AND CAST(h.inward_date AS DATE) = @today) AS today_item_received,
+
+        /* This month received */
+        (SELECT COUNT(1)
+            FROM dbo.tbl_inward_challan
+            WHERE status = 1 AND inward_date >= @monthStart AND inward_date < @monthEnd) AS month_challan_received,
+        (SELECT ISNULL(SUM(CAST(d.qty_inward AS BIGINT)), 0)
+            FROM dbo.tbl_inward_challan_details d
+            INNER JOIN dbo.tbl_inward_challan h ON h.inward_id = d.inward_id
+            WHERE d.status = 1 AND h.status = 1 AND h.inward_date >= @monthStart AND h.inward_date < @monthEnd) AS month_item_received;
+END
+GO
+
 IF OBJECT_ID('dbo.dlt_user_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_user_sp;
 GO
 CREATE PROCEDURE dbo.dlt_user_sp
@@ -720,17 +764,6 @@ BEGIN
         DECLARE @uid INT = CAST(@by AS INT);
         DECLARE @d DATE = CAST(@inward_date AS DATE);
         DECLARE @cn NVARCHAR(50) = LTRIM(RTRIM(ISNULL(@challan_no, N'')));
-
-        IF LEN(@cn) > 0
-        BEGIN
-            IF EXISTS (
-                SELECT 1 FROM dbo.tbl_inward_challan
-                WHERE party_id = @pid AND challan_no = @cn AND status = 1)
-            BEGIN
-                SELECT 'False' AS Success, N'Duplicate challan number for this party.' AS Message;
-                RETURN;
-            END
-        END
 
         BEGIN TRANSACTION;
 
@@ -1115,5 +1148,555 @@ BEGIN
     INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id
     WHERE d.inward_id = @id AND oh.status = 1
     ORDER BY oh.outward_date DESC, oh.outward_history_id DESC;
+END
+GO
+
+/* ==================== INVOICE ==================== */
+
+IF OBJECT_ID('dbo.sel_inward_lines_for_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_inward_lines_for_invoice_sp;
+GO
+CREATE PROCEDURE dbo.sel_inward_lines_for_invoice_sp
+    @party_id NVARCHAR(50),
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50),
+    @inward_id NVARCHAR(50) = N'0'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+    DECLARE @iid BIGINT = CAST(ISNULL(NULLIF(LTRIM(RTRIM(@inward_id)), N''), N'0') AS BIGINT);
+
+    SELECT
+        d.inward_detail_id,
+        h.inward_id,
+        h.challan_no,
+        h.inward_date,
+        d.part_id,
+        pm.part_name,
+        d.qty_inward,
+        ISNULL(x.qty_invoiced_so_far, 0) AS qty_invoiced_so_far,
+        d.qty_inward - ISNULL(x.qty_invoiced_so_far, 0) AS qty_available_for_invoice,
+        COALESCE(d.rate_at_time, pm.rate) AS suggest_rate,
+        pm.tax_per AS suggest_tax_per
+    FROM dbo.tbl_inward_challan_details AS d
+    INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = d.inward_id AND h.status = 1
+    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+    LEFT JOIN (
+        SELECT
+            id.inward_detail_id,
+            SUM(id.qty_invoiced) AS qty_invoiced_so_far
+        FROM dbo.tbl_invoice_detail AS id
+        INNER JOIN dbo.tbl_invoice AS i ON i.invoice_id = id.invoice_id AND i.status = 1
+        WHERE id.status = 1
+        GROUP BY id.inward_detail_id
+    ) AS x ON x.inward_detail_id = d.inward_detail_id
+    WHERE d.status = 1
+      AND h.party_id = @pid
+      AND CAST(h.inward_date AS DATE) BETWEEN @f AND @t
+      AND (@iid = 0 OR h.inward_id = @iid)
+    ORDER BY h.inward_date, h.inward_id, d.inward_detail_id;
+END
+GO
+
+IF OBJECT_ID('dbo.sel_inward_challan_invoice_status_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_inward_challan_invoice_status_sp;
+GO
+CREATE PROCEDURE dbo.sel_inward_challan_invoice_status_sp
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50),
+    @party_id NVARCHAR(50) = N'0'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+    DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
+
+    ;WITH line_inv AS (
+        SELECT
+            d.inward_id,
+            d.inward_detail_id,
+            d.qty_inward,
+            ISNULL(SUM(id.qty_invoiced), 0) AS qty_invoiced
+        FROM dbo.tbl_inward_challan_details AS d
+        INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = d.inward_id AND h.status = 1
+        LEFT JOIN dbo.tbl_invoice_detail AS id
+            ON id.inward_detail_id = d.inward_detail_id AND id.status = 1
+        LEFT JOIN dbo.tbl_invoice AS i ON i.invoice_id = id.invoice_id AND i.status = 1
+        WHERE d.status = 1
+          AND CAST(h.inward_date AS DATE) BETWEEN @f AND @t
+          AND (@pid = 0 OR h.party_id = @pid)
+        GROUP BY d.inward_id, d.inward_detail_id, d.qty_inward
+    ),
+    challan_agg AS (
+        SELECT
+            inward_id,
+            MAX(CASE WHEN qty_invoiced > 0 THEN 1 ELSE 0 END) AS has_billed,
+            MAX(CASE WHEN qty_invoiced < qty_inward THEN 1 ELSE 0 END) AS has_open_line
+        FROM line_inv
+        GROUP BY inward_id
+    )
+    SELECT
+        h.inward_id,
+        h.challan_no,
+        h.inward_date,
+        h.party_id,
+        p.party_name,
+        CASE
+            WHEN ISNULL(a.has_billed, 0) = 0 THEN N'None'
+            WHEN ISNULL(a.has_open_line, 0) = 1 THEN N'Partial'
+            ELSE N'Full'
+        END AS invoice_status
+    FROM dbo.tbl_inward_challan AS h
+    INNER JOIN dbo.tbl_party_master AS p ON p.party_id = h.party_id
+    LEFT JOIN challan_agg AS a ON a.inward_id = h.inward_id
+    WHERE h.status = 1
+      AND CAST(h.inward_date AS DATE) BETWEEN @f AND @t
+      AND (@pid = 0 OR h.party_id = @pid);
+END
+GO
+
+IF OBJECT_ID('dbo.dis_invoice_list_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_invoice_list_sp;
+GO
+CREATE PROCEDURE dbo.dis_invoice_list_sp
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50),
+    @party_id NVARCHAR(50) = N'0'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+    DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
+
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY i.invoice_date DESC, i.invoice_id DESC) AS sr,
+        i.invoice_id,
+        i.invoice_no,
+        i.invoice_date,
+        i.invoice_kind,
+        i.party_id,
+        p.party_name,
+        i.sub_total,
+        i.tax_total,
+        i.grand_total,
+        i.create_date
+    FROM dbo.tbl_invoice AS i
+    INNER JOIN dbo.tbl_party_master AS p ON p.party_id = i.party_id
+    WHERE i.status = 1
+      AND CAST(i.invoice_date AS DATE) BETWEEN @f AND @t
+      AND (@pid = 0 OR i.party_id = @pid)
+    ORDER BY i.invoice_date DESC, i.invoice_id DESC;
+END
+GO
+
+IF OBJECT_ID('dbo.get_invoice_for_edit_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.get_invoice_for_edit_sp;
+GO
+CREATE PROCEDURE dbo.get_invoice_for_edit_sp
+    @invoice_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @id BIGINT = CAST(@invoice_id AS BIGINT);
+
+    SELECT
+        i.invoice_id,
+        i.party_id,
+        i.invoice_kind,
+        i.invoice_no,
+        i.invoice_date,
+        i.sub_total,
+        i.tax_total,
+        i.grand_total,
+        i.remarks
+    FROM dbo.tbl_invoice AS i
+    WHERE i.invoice_id = @id AND i.status = 1;
+
+    SELECT
+        d.invoice_detail_id,
+        d.inward_detail_id,
+        d.part_id,
+        pm.part_name,
+        d.qty_invoiced,
+        d.rate,
+        d.tax_per,
+        d.taxable_amount,
+        d.tax_amount,
+        d.line_total,
+        h.inward_id,
+        h.challan_no,
+        h.inward_date,
+        det.qty_inward,
+        ISNULL(inv_all.qty_sum, 0) AS qty_invoiced_so_far,
+        det.qty_inward - (ISNULL(inv_all.qty_sum, 0) - d.qty_invoiced) AS qty_can_bill_max
+    FROM dbo.tbl_invoice_detail AS d
+    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id
+    INNER JOIN dbo.tbl_inward_challan_details AS det ON det.inward_detail_id = d.inward_detail_id AND det.status = 1
+    INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = det.inward_id AND h.status = 1
+    LEFT JOIN (
+        SELECT
+            id3.inward_detail_id,
+            SUM(id3.qty_invoiced) AS qty_sum
+        FROM dbo.tbl_invoice_detail AS id3
+        INNER JOIN dbo.tbl_invoice AS iv3 ON iv3.invoice_id = id3.invoice_id AND iv3.status = 1
+        WHERE id3.status = 1
+        GROUP BY id3.inward_detail_id
+    ) AS inv_all ON inv_all.inward_detail_id = d.inward_detail_id
+    WHERE d.invoice_id = @id AND d.status = 1
+    ORDER BY d.invoice_detail_id;
+END
+GO
+
+IF OBJECT_ID('dbo.ins_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_invoice_sp;
+GO
+CREATE PROCEDURE dbo.ins_invoice_sp
+    @party_id NVARCHAR(50),
+    @invoice_kind NVARCHAR(20),
+    @invoice_date NVARCHAR(50),
+    @remarks NVARCHAR(MAX) = NULL,
+    @by NVARCHAR(50),
+    @inward_detail_ids NVARCHAR(MAX),
+    @qtys NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+        DECLARE @kind NVARCHAR(20) = UPPER(LTRIM(RTRIM(@invoice_kind)));
+        DECLARE @invDate DATETIME = CAST(@invoice_date AS DATETIME);
+        DECLARE @d DATE = CAST(@invDate AS DATE);
+        DECLARE @invNo NVARCHAR(50);
+        DECLARE @pfx NVARCHAR(30);
+        DECLARE @nx INT;
+
+        IF @kind NOT IN (N'GST', N'NON_GST')
+        BEGIN
+            SELECT 'False' AS Success, N'invoice_kind must be GST or NON_GST.' AS Message;
+            RETURN;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_party_master WHERE party_id = @pid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Party not found.' AS Message;
+            RETURN;
+        END
+
+        SET @pfx = N'INV-' + SUBSTRING(CONVERT(VARCHAR(8), @d, 112), 1, 6) + N'-';
+
+        ;WITH nums AS (
+            SELECT TRY_CAST(SUBSTRING(invoice_no, LEN(@pfx) + 1, 8) AS INT) AS n
+            FROM dbo.tbl_invoice
+            WHERE status = 1
+              AND invoice_no LIKE @pfx + N'%'
+              AND LEN(invoice_no) > LEN(@pfx)
+        )
+        SELECT @nx = ISNULL(MAX(n), 0) + 1 FROM nums;
+
+        SET @invNo = @pfx + RIGHT(N'00000' + CAST(@nx AS VARCHAR(12)), 5);
+
+        IF EXISTS (SELECT 1 FROM dbo.tbl_invoice WHERE invoice_no = @invNo AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Could not assign unique invoice number. Retry.' AS Message;
+            RETURN;
+        END
+
+        DECLARE @sub DECIMAL(18, 2) = 0;
+        DECLARE @tax DECIMAL(18, 2) = 0;
+        DECLARE @grand DECIMAL(18, 2) = 0;
+
+        BEGIN TRANSACTION;
+
+        INSERT INTO dbo.tbl_invoice (
+            party_id, invoice_kind, invoice_no, invoice_date, period_from, period_to,
+            doc_status, sub_total, tax_total, grand_total, remarks, status, create_by, create_date)
+        VALUES (
+            @pid, @kind, @invNo, @invDate, NULL, NULL,
+            N'Draft', 0, 0, 0, @remarks, 1, @uid, dbo.get_date());
+
+        DECLARE @invid BIGINT = SCOPE_IDENTITY();
+
+        DECLARE @p NVARCHAR(MAX) = @inward_detail_ids;
+        DECLARE @q NVARCHAR(MAX) = @qtys;
+        DECLARE @segP NVARCHAR(50), @segQ NVARCHAR(50);
+        DECLARE @did BIGINT, @qty INT;
+        DECLARE @rate DECIMAL(18, 2);
+        DECLARE @taxper DECIMAL(18, 2);
+        DECLARE @taxable DECIMAL(18, 2);
+        DECLARE @taxamt DECIMAL(18, 2);
+        DECLARE @linet DECIMAL(18, 2);
+        DECLARE @qtyIn INT;
+        DECLARE @already INT;
+        DECLARE @partId BIGINT;
+
+        WHILE LEN(@p) > 0 AND CHARINDEX(N',', @p) > 0
+        BEGIN
+            SET @segP = LEFT(@p, CHARINDEX(N',', @p) - 1);
+            SET @segQ = LEFT(@q, CHARINDEX(N',', @q) - 1);
+            SET @p = SUBSTRING(@p, CHARINDEX(N',', @p) + 1, 8000);
+            SET @q = SUBSTRING(@q, CHARINDEX(N',', @q) + 1, 8000);
+
+            IF LTRIM(RTRIM(@segP)) = N'' BREAK;
+
+            SET @did = CAST(@segP AS BIGINT);
+            SET @qty = CAST(@segQ AS INT);
+
+            IF @qty <= 0 CONTINUE;
+
+            SELECT
+                @qtyIn = d.qty_inward,
+                @partId = d.part_id,
+                @rate = COALESCE(d.rate_at_time, pm.rate),
+                @taxper = CASE WHEN @kind = N'NON_GST' THEN 0 ELSE pm.tax_per END
+            FROM dbo.tbl_inward_challan_details AS d
+            INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = d.inward_id AND h.status = 1
+            INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+            WHERE d.inward_detail_id = @did AND d.status = 1 AND h.party_id = @pid;
+
+            IF @qtyIn IS NULL
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 'False' AS Success, N'Inward line not found or wrong party.' AS Message;
+                RETURN;
+            END
+
+            SELECT @already = ISNULL(SUM(id.qty_invoiced), 0)
+            FROM dbo.tbl_invoice_detail AS id
+            INNER JOIN dbo.tbl_invoice AS iv ON iv.invoice_id = id.invoice_id
+            WHERE id.inward_detail_id = @did AND id.status = 1 AND iv.status = 1;
+
+            IF @already + @qty > @qtyIn
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 'False' AS Success, N'Invoice qty exceeds inward qty for a line.' AS Message;
+                RETURN;
+            END
+
+            SET @taxable = ROUND(@rate * @qty, 2);
+            SET @taxamt = CASE WHEN @kind = N'NON_GST' THEN 0 ELSE ROUND(@taxable * @taxper / 100.0, 2) END;
+            SET @linet = @taxable + @taxamt;
+
+            INSERT INTO dbo.tbl_invoice_detail (
+                invoice_id, inward_detail_id, part_id, qty_invoiced, rate, tax_per,
+                taxable_amount, tax_amount, line_total, status, create_by, create_date)
+            VALUES (
+                @invid, @did, @partId, @qty, @rate, @taxper,
+                @taxable, @taxamt, @linet, 1, @uid, dbo.get_date());
+
+            SET @sub = @sub + @taxable;
+            SET @tax = @tax + @taxamt;
+            SET @grand = @grand + @linet;
+            SET @qtyIn = NULL;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_invoice_detail WHERE invoice_id = @invid AND status = 1)
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT 'False' AS Success, N'At least one invoice line is required.' AS Message;
+            RETURN;
+        END
+
+        UPDATE dbo.tbl_invoice
+        SET sub_total = @sub, tax_total = @tax, grand_total = @grand, modify_by = @uid, modify_date = dbo.get_date()
+        WHERE invoice_id = @invid;
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Saved.' AS Message, @invid AS invoice_id, @invNo AS invoice_no;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.upd_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.upd_invoice_sp;
+GO
+CREATE PROCEDURE dbo.upd_invoice_sp
+    @invoice_id NVARCHAR(50),
+    @party_id NVARCHAR(50),
+    @invoice_kind NVARCHAR(20),
+    @invoice_date NVARCHAR(50),
+    @remarks NVARCHAR(MAX) = NULL,
+    @by NVARCHAR(50),
+    @inward_detail_ids NVARCHAR(MAX),
+    @qtys NVARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @invid BIGINT = CAST(@invoice_id AS BIGINT);
+        DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+        DECLARE @kind NVARCHAR(20) = UPPER(LTRIM(RTRIM(@invoice_kind)));
+        DECLARE @invDate DATETIME = CAST(@invoice_date AS DATETIME);
+
+        IF @kind NOT IN (N'GST', N'NON_GST')
+        BEGIN
+            SELECT 'False' AS Success, N'invoice_kind must be GST or NON_GST.' AS Message;
+            RETURN;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_invoice WHERE invoice_id = @invid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Invoice not found.' AS Message;
+            RETURN;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_party_master WHERE party_id = @pid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Party not found.' AS Message;
+            RETURN;
+        END
+
+        DECLARE @sub DECIMAL(18, 2) = 0;
+        DECLARE @tax DECIMAL(18, 2) = 0;
+        DECLARE @grand DECIMAL(18, 2) = 0;
+
+        BEGIN TRANSACTION;
+
+        UPDATE dbo.tbl_invoice_detail
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE invoice_id = @invid AND status = 1;
+
+        UPDATE dbo.tbl_invoice
+        SET
+            party_id = @pid,
+            invoice_kind = @kind,
+            invoice_date = @invDate,
+            period_from = NULL,
+            period_to = NULL,
+            doc_status = N'Draft',
+            remarks = @remarks,
+            modify_by = @uid,
+            modify_date = dbo.get_date()
+        WHERE invoice_id = @invid;
+
+        DECLARE @p NVARCHAR(MAX) = @inward_detail_ids;
+        DECLARE @q NVARCHAR(MAX) = @qtys;
+        DECLARE @segP NVARCHAR(50), @segQ NVARCHAR(50);
+        DECLARE @did BIGINT, @qty INT;
+        DECLARE @rate DECIMAL(18, 2);
+        DECLARE @taxper DECIMAL(18, 2);
+        DECLARE @taxable DECIMAL(18, 2);
+        DECLARE @taxamt DECIMAL(18, 2);
+        DECLARE @linet DECIMAL(18, 2);
+        DECLARE @qtyIn INT;
+        DECLARE @already INT;
+        DECLARE @partId BIGINT;
+
+        WHILE LEN(@p) > 0 AND CHARINDEX(N',', @p) > 0
+        BEGIN
+            SET @segP = LEFT(@p, CHARINDEX(N',', @p) - 1);
+            SET @segQ = LEFT(@q, CHARINDEX(N',', @q) - 1);
+            SET @p = SUBSTRING(@p, CHARINDEX(N',', @p) + 1, 8000);
+            SET @q = SUBSTRING(@q, CHARINDEX(N',', @q) + 1, 8000);
+
+            IF LTRIM(RTRIM(@segP)) = N'' BREAK;
+
+            SET @did = CAST(@segP AS BIGINT);
+            SET @qty = CAST(@segQ AS INT);
+
+            IF @qty <= 0 CONTINUE;
+
+            SELECT
+                @qtyIn = d.qty_inward,
+                @partId = d.part_id,
+                @rate = COALESCE(d.rate_at_time, pm.rate),
+                @taxper = CASE WHEN @kind = N'NON_GST' THEN 0 ELSE pm.tax_per END
+            FROM dbo.tbl_inward_challan_details AS d
+            INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = d.inward_id AND h.status = 1
+            INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+            WHERE d.inward_detail_id = @did AND d.status = 1 AND h.party_id = @pid;
+
+            IF @qtyIn IS NULL
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 'False' AS Success, N'Inward line not found or wrong party.' AS Message;
+                RETURN;
+            END
+
+            SELECT @already = ISNULL(SUM(id.qty_invoiced), 0)
+            FROM dbo.tbl_invoice_detail AS id
+            INNER JOIN dbo.tbl_invoice AS iv ON iv.invoice_id = id.invoice_id
+            WHERE id.inward_detail_id = @did AND id.status = 1 AND iv.status = 1;
+
+            IF @already + @qty > @qtyIn
+            BEGIN
+                ROLLBACK TRANSACTION;
+                SELECT 'False' AS Success, N'Invoice qty exceeds inward qty for a line.' AS Message;
+                RETURN;
+            END
+
+            SET @taxable = ROUND(@rate * @qty, 2);
+            SET @taxamt = CASE WHEN @kind = N'NON_GST' THEN 0 ELSE ROUND(@taxable * @taxper / 100.0, 2) END;
+            SET @linet = @taxable + @taxamt;
+
+            INSERT INTO dbo.tbl_invoice_detail (
+                invoice_id, inward_detail_id, part_id, qty_invoiced, rate, tax_per,
+                taxable_amount, tax_amount, line_total, status, create_by, create_date)
+            VALUES (
+                @invid, @did, @partId, @qty, @rate, @taxper,
+                @taxable, @taxamt, @linet, 1, @uid, dbo.get_date());
+
+            SET @sub = @sub + @taxable;
+            SET @tax = @tax + @taxamt;
+            SET @grand = @grand + @linet;
+            SET @qtyIn = NULL;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_invoice_detail WHERE invoice_id = @invid AND status = 1)
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT 'False' AS Success, N'At least one invoice line is required.' AS Message;
+            RETURN;
+        END
+
+        UPDATE dbo.tbl_invoice
+        SET sub_total = @sub, tax_total = @tax, grand_total = @grand, modify_by = @uid, modify_date = dbo.get_date()
+        WHERE invoice_id = @invid;
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Updated.' AS Message, @invid AS invoice_id;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.dlt_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_invoice_sp;
+GO
+CREATE PROCEDURE dbo.dlt_invoice_sp
+    @invoice_id NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @invid BIGINT = CAST(@invoice_id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_invoice WHERE invoice_id = @invid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Invoice not found.' AS Message;
+            RETURN;
+        END
+
+        UPDATE dbo.tbl_invoice_detail
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE invoice_id = @invid AND status = 1;
+
+        UPDATE dbo.tbl_invoice
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE invoice_id = @invid;
+
+        SELECT 'True' AS Success, N'Deleted.' AS Message;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
 END
 GO

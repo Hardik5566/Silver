@@ -1,5 +1,5 @@
 ﻿/*
-  Tables: Party → Unit → Part → User → Inward (header + lines + outward history)
+  Tables: Party → Unit → Part → User → Inward (header + lines + outward history) → Invoice
   Run order: Function.sql → Table.sql → StoreProcedure.sql
 */
 
@@ -159,6 +159,93 @@ CREATE INDEX IX_outward_history_inward_detail ON dbo.tbl_outward_history (inward
 GO
 
 CREATE INDEX IX_outward_history_date ON dbo.tbl_outward_history (outward_date DESC);
+GO
+
+/* --------------------- Invoice (header + lines, links to inward detail) --------------------- */
+
+IF OBJECT_ID('dbo.tbl_invoice', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tbl_invoice (
+        invoice_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        party_id BIGINT NOT NULL,
+        invoice_kind NVARCHAR(20) NOT NULL,
+        /* GST = tax on lines from part; NON_GST = tax stored as 0 on lines */
+        invoice_no NVARCHAR(50) NOT NULL,
+        invoice_date DATETIME NOT NULL,
+        period_from DATE NULL,
+        period_to DATE NULL,
+        doc_status NVARCHAR(20) NOT NULL DEFAULT N'Draft',
+        /* Draft = editable; Final = block line/header edits via SP */
+        sub_total DECIMAL(18, 2) NOT NULL DEFAULT 0,
+        tax_total DECIMAL(18, 2) NOT NULL DEFAULT 0,
+        grand_total DECIMAL(18, 2) NOT NULL DEFAULT 0,
+        remarks NVARCHAR(MAX) NULL,
+        status BIT NOT NULL DEFAULT 1,
+        create_by INT NULL,
+        create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+        modify_by INT NULL,
+        modify_date DATETIME NULL,
+        delete_by INT NULL,
+        delete_date DATETIME NULL,
+        CONSTRAINT CK_invoice_kind CHECK (invoice_kind IN (N'GST', N'NON_GST')),
+        CONSTRAINT CK_invoice_doc_status CHECK (doc_status IN (N'Draft', N'Final')),
+        CONSTRAINT FK_invoice_party FOREIGN KEY (party_id) REFERENCES dbo.tbl_party_master (party_id)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_invoice_no_active' AND object_id = OBJECT_ID(N'dbo.tbl_invoice'))
+BEGIN
+    CREATE UNIQUE INDEX UX_invoice_no_active
+        ON dbo.tbl_invoice (invoice_no)
+        WHERE status = 1;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_invoice_party_date' AND object_id = OBJECT_ID(N'dbo.tbl_invoice'))
+BEGIN
+    CREATE INDEX IX_invoice_party_date ON dbo.tbl_invoice (party_id, invoice_date DESC);
+END
+GO
+
+IF OBJECT_ID('dbo.tbl_invoice_detail', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tbl_invoice_detail (
+        invoice_detail_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        invoice_id BIGINT NOT NULL,
+        inward_detail_id BIGINT NOT NULL,
+        part_id BIGINT NOT NULL,
+        qty_invoiced INT NOT NULL,
+        rate DECIMAL(18, 2) NOT NULL,
+        tax_per DECIMAL(18, 2) NOT NULL DEFAULT 0,
+        taxable_amount DECIMAL(18, 2) NOT NULL,
+        tax_amount DECIMAL(18, 2) NOT NULL,
+        line_total DECIMAL(18, 2) NOT NULL,
+        status BIT NOT NULL DEFAULT 1,
+        create_by INT NULL,
+        create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+        modify_by INT NULL,
+        modify_date DATETIME NULL,
+        delete_by INT NULL,
+        delete_date DATETIME NULL,
+        CONSTRAINT FK_invoice_detail_invoice FOREIGN KEY (invoice_id) REFERENCES dbo.tbl_invoice (invoice_id),
+        CONSTRAINT FK_invoice_detail_inward_line FOREIGN KEY (inward_detail_id) REFERENCES dbo.tbl_inward_challan_details (inward_detail_id),
+        CONSTRAINT FK_invoice_detail_part FOREIGN KEY (part_id) REFERENCES dbo.tbl_part_master (part_id),
+        CONSTRAINT CK_invoice_detail_qty CHECK (qty_invoiced > 0)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_invoice_detail_invoice' AND object_id = OBJECT_ID(N'dbo.tbl_invoice_detail'))
+BEGIN
+    CREATE INDEX IX_invoice_detail_invoice ON dbo.tbl_invoice_detail (invoice_id);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_invoice_detail_inward_line' AND object_id = OBJECT_ID(N'dbo.tbl_invoice_detail'))
+BEGIN
+    CREATE INDEX IX_invoice_detail_inward_line ON dbo.tbl_invoice_detail (inward_detail_id);
+END
 GO
 
 -- One-time on existing DB (if index was created without the filter): drop and recreate

@@ -180,6 +180,20 @@
                         </a>
                     </li>
 
+                    <li class="menu-label">Invoice</li>
+                    <li>
+                        <a href="Invoice_Entry.aspx">
+                            <div class="parent-icon"><i class="bi bi-receipt"></i></div>
+                            <div class="menu-title">New invoice</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Invoice_List.aspx">
+                            <div class="parent-icon"><i class="bi bi-journal-text"></i></div>
+                            <div class="menu-title">Invoice list</div>
+                        </a>
+                    </li>
+
                 </ul>
                 <!--end navigation-->
             </aside>
