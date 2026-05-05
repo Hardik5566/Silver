@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Data;
+using System.Web;
 using System.Web.UI;
 
 public partial class Home : System.Web.UI.Page
@@ -9,6 +10,7 @@ public partial class Home : System.Web.UI.Page
         if (!IsPostBack)
         {
             LoadCounts();
+            LoadTrend();
         }
     }
 
@@ -31,13 +33,33 @@ public partial class Home : System.Web.UI.Page
         lit_count_month_challan.Text = r["month_challan_received"].ToString();
         lit_count_month_item.Text = r["month_item_received"].ToString();
 
-        // Right-side quick stats
-        lit_count_today_challan2.Text = lit_count_today_challan.Text;
-        lit_count_today_item2.Text = lit_count_today_item.Text;
-        lit_count_month_challan2.Text = lit_count_month_challan.Text;
-        lit_count_month_item2.Text = lit_count_month_item.Text;
-
-        // Part-wise section removed from UI (counts only).
+        lit_out_today_challan.Text = r["today_outward_challan"].ToString();
+        lit_out_today_item.Text = r["today_outward_item"].ToString();
+        lit_out_month_challan.Text = r["month_outward_challan"].ToString();
+        lit_out_month_item.Text = r["month_outward_item"].ToString();
     }
 
+    private void LoadTrend()
+    {
+        DataTable dt = BAL_Dashboard.sel_dashboard_trend_30days();
+        if (dt.Rows.Count == 0) return;
+
+        System.Text.StringBuilder labels = new System.Text.StringBuilder();
+        System.Text.StringBuilder inQty = new System.Text.StringBuilder();
+        System.Text.StringBuilder outQty = new System.Text.StringBuilder();
+
+        for (int i = 0; i < dt.Rows.Count; i++)
+        {
+            if (i > 0) { labels.Append(","); inQty.Append(","); outQty.Append(","); }
+            // Output JSON-safe strings because Home.aspx uses JSON.parse(...)
+            string label = dt.Rows[i]["date_label"].ToString();
+            labels.Append("\"").Append(HttpUtility.JavaScriptStringEncode(label)).Append("\"");
+            inQty.Append(dt.Rows[i]["in_qty"].ToString());
+            outQty.Append(dt.Rows[i]["out_qty"].ToString());
+        }
+
+        lit_tr30_labels.Text = labels.ToString();
+        lit_tr30_in.Text = inQty.ToString();
+        lit_tr30_out.Text = outQty.ToString();
+    }
 }

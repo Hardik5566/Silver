@@ -180,6 +180,7 @@
         }
         .inv-line-table col.inv-col-sr { width: 4%; }
         .inv-line-table col.inv-col-date { width: 10%; min-width: 4.8em; }
+        .inv-line-table col.inv-col-challan { width: 12%; }
         .inv-line-table col.inv-col-item { width: auto; }
         .inv-line-table col.inv-col-qty { width: 5.5%; }
         .inv-line-table col.inv-col-rate { width: 8.5%; }
@@ -225,6 +226,11 @@
             font-variant-numeric: tabular-nums;
             color: #111;
             text-align: center;
+            white-space: nowrap;
+        }
+        .inv-line-table .inv-td-challan{
+            color:#111;
+            font-variant-numeric: tabular-nums;
             white-space: nowrap;
         }
         .inv-line-table .inv-td-item {

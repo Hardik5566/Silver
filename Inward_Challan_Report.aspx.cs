@@ -9,8 +9,17 @@ public partial class Inward_Challan_Report : Page
     {
         if (!IsPostBack)
         {
-            txt_from.Text = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).ToString("yyyy-MM-dd");
-            txt_to.Text = DateTime.Today.ToString("yyyy-MM-dd");
+            string mode = (Request.QueryString["mode"] ?? "").Trim().ToLowerInvariant();
+            if (mode == "today")
+            {
+                txt_from.Text = DateTime.Today.ToString("yyyy-MM-dd");
+                txt_to.Text = DateTime.Today.ToString("yyyy-MM-dd");
+            }
+            else
+            {
+                txt_from.Text = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).ToString("yyyy-MM-dd");
+                txt_to.Text = DateTime.Today.ToString("yyyy-MM-dd");
+            }
             BindParty();
             BindGrid();
         }

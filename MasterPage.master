@@ -179,6 +179,12 @@
                             <div class="menu-title">Challan history</div>
                         </a>
                     </li>
+                    <li>
+                        <a href="Outward_History.aspx">
+                            <div class="parent-icon"><i class="bi bi-truck"></i></div>
+                            <div class="menu-title">Outward history</div>
+                        </a>
+                    </li>
 
                     <li class="menu-label">Invoice</li>
                     <li>

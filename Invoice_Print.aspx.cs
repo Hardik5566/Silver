@@ -128,10 +128,10 @@ public partial class Invoice_Print : Page
     {
         var sb = new StringBuilder();
         sb.Append("<table class=\"inv-line-table\"><colgroup>");
-        sb.Append("<col class=\"inv-col-sr\" /><col class=\"inv-col-date\" /><col class=\"inv-col-item\" />");
+        sb.Append("<col class=\"inv-col-sr\" /><col class=\"inv-col-date\" /><col class=\"inv-col-challan\" /><col class=\"inv-col-item\" />");
         sb.Append("<col class=\"inv-col-qty\" /><col class=\"inv-col-rate\" /><col class=\"inv-col-tax\" /><col class=\"inv-col-taxamt\" /><col class=\"inv-col-total\" />");
         sb.Append("</colgroup><thead><tr>");
-        sb.Append("<th>Sr</th><th class=\"inv-th-date\">Date</th><th>Item</th>");
+        sb.Append("<th>Sr</th><th class=\"inv-th-date\">Date</th><th>Challan</th><th>Item</th>");
         sb.Append("<th class=\"inv-th-num\">Qty</th><th class=\"inv-th-num\">Rate</th>");
         sb.Append("<th class=\"inv-th-num\">Tax</th><th class=\"inv-th-num\">Tax amount</th><th class=\"inv-th-num\">Total amount</th>");
         sb.Append("</tr></thead><tbody>");
@@ -142,6 +142,7 @@ public partial class Invoice_Print : Page
             sr++;
             string trClass = (sr % 2 == 0) ? "inv-tr inv-tr--even" : "inv-tr";
             string part = r["part_name"] != DBNull.Value ? r["part_name"].ToString() : "";
+            string challanNo = r.Table.Columns.Contains("challan_no") && r["challan_no"] != DBNull.Value ? r["challan_no"].ToString().Trim() : "";
             string chd = "";
             if (r["inward_date"] != DBNull.Value)
                 chd = Convert.ToDateTime(r["inward_date"], CultureInfo.InvariantCulture).ToString(PrintDateFormat, InvCulture);
@@ -161,6 +162,9 @@ public partial class Invoice_Print : Page
             sb.Append("<tr class=\"").Append(trClass).Append("\">");
             sb.Append("<td class=\"inv-td-sno\">").Append(sr).Append("</td>");
             sb.Append("<td class=\"inv-td-date\">").Append(HttpUtility.HtmlEncode(chd)).Append("</td>");
+            sb.Append("<td class=\"inv-td-challan\">")
+                .Append(string.IsNullOrEmpty(challanNo) ? "\u2014" : HttpUtility.HtmlEncode(challanNo))
+                .Append("</td>");
             sb.Append("<td class=\"inv-td-item\">").Append(HttpUtility.HtmlEncode(part)).Append("</td>");
             sb.Append("<td class=\"inv-td-num\">").Append(qty.ToString(InvCulture)).Append("</td>");
             sb.Append("<td class=\"inv-td-num\">").Append(HttpUtility.HtmlEncode(rate.ToString("N2", InvCulture))).Append("</td>");

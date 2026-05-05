@@ -38,6 +38,42 @@ BEGIN
 END
 GO
 
+/* --------------------- Outward history list (dashboard + report) --------------------- */
+IF OBJECT_ID('dbo.dis_outward_history_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_outward_history_sp;
+GO
+CREATE PROCEDURE dbo.dis_outward_history_sp
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50),
+    @party_id NVARCHAR(50) = N'0'
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+    DECLARE @pid BIGINT = CAST(ISNULL(NULLIF(LTRIM(RTRIM(@party_id)), N''), N'0') AS BIGINT);
+
+    SELECT
+        oh.outward_history_id,
+        oh.outward_date,
+        ISNULL(NULLIF(LTRIM(RTRIM(oh.slip_no)), N''), N'—') AS slip_no,
+        h.challan_no,
+        h.inward_date,
+        p.party_name,
+        pm.part_name,
+        oh.qty_out,
+        oh.remarks
+    FROM dbo.tbl_outward_history AS oh
+    INNER JOIN dbo.tbl_inward_challan_details AS d ON d.inward_detail_id = oh.inward_detail_id AND d.status = 1
+    INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = d.inward_id AND h.status = 1
+    INNER JOIN dbo.tbl_party_master AS p ON p.party_id = h.party_id AND p.status = 1
+    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+    WHERE oh.status = 1
+      AND CAST(oh.outward_date AS DATE) BETWEEN @f AND @t
+      AND (@pid = 0 OR p.party_id = @pid)
+    ORDER BY oh.outward_date DESC, oh.outward_history_id DESC;
+END
+GO
+
 IF OBJECT_ID('dbo.upd_party_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.upd_party_sp;
 GO
 CREATE PROCEDURE dbo.upd_party_sp
@@ -508,7 +544,7 @@ GO
 /* --------------------- Dashboard counts --------------------- */
 IF OBJECT_ID('dbo.sel_dashboard_counts_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_dashboard_counts_sp;
 GO
-CREATE PROCEDURE dbo.sel_dashboard_counts_sp
+alter PROCEDURE dbo.sel_dashboard_counts_sp
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -522,12 +558,15 @@ BEGIN
         (SELECT COUNT(1) FROM dbo.tbl_party_master WHERE status = 1) AS total_party,
         (SELECT COUNT(1) FROM dbo.tbl_part_master WHERE status = 1) AS total_part,
 
-        /* Inward challan */
-        (SELECT COUNT(1) FROM dbo.tbl_inward_challan WHERE status = 1) AS total_active_challan,
-        (SELECT ISNULL(SUM(CAST(d.qty_inward AS BIGINT)), 0)
+        /* Active (due) = pending qty only */
+        (SELECT COUNT(DISTINCT h.inward_id)
+            FROM dbo.tbl_inward_challan h
+            INNER JOIN dbo.tbl_inward_challan_details d ON d.inward_id = h.inward_id
+            WHERE h.status = 1 AND d.status = 1 AND (d.qty_inward - d.qty_out_done) > 0) AS total_active_challan,
+        (SELECT ISNULL(SUM(CAST(d.qty_inward - d.qty_out_done AS BIGINT)), 0)
             FROM dbo.tbl_inward_challan_details d
             INNER JOIN dbo.tbl_inward_challan h ON h.inward_id = d.inward_id
-            WHERE d.status = 1 AND h.status = 1) AS total_active_item_qty,
+            WHERE d.status = 1 AND h.status = 1 AND (d.qty_inward - d.qty_out_done) > 0) AS total_active_item_qty,
 
         /* Today received */
         (SELECT COUNT(1)
@@ -545,7 +584,64 @@ BEGIN
         (SELECT ISNULL(SUM(CAST(d.qty_inward AS BIGINT)), 0)
             FROM dbo.tbl_inward_challan_details d
             INNER JOIN dbo.tbl_inward_challan h ON h.inward_id = d.inward_id
-            WHERE d.status = 1 AND h.status = 1 AND h.inward_date >= @monthStart AND h.inward_date < @monthEnd) AS month_item_received;
+            WHERE d.status = 1 AND h.status = 1 AND h.inward_date >= @monthStart AND h.inward_date < @monthEnd) AS month_item_received,
+        /* Outward (history) */
+        (SELECT COUNT(DISTINCT CASE
+                    WHEN LTRIM(RTRIM(ISNULL(oh.slip_no, N''))) <> N'' THEN LTRIM(RTRIM(oh.slip_no))
+                    ELSE N'ROW-' + CAST(oh.outward_history_id AS NVARCHAR(50))
+                END)
+            FROM dbo.tbl_outward_history oh
+            WHERE oh.status = 1 AND CAST(oh.outward_date AS DATE) = @today) AS today_outward_challan,
+        (SELECT ISNULL(SUM(CAST(oh.qty_out AS BIGINT)), 0)
+            FROM dbo.tbl_outward_history oh
+            WHERE oh.status = 1 AND CAST(oh.outward_date AS DATE) = @today) AS today_outward_item,
+        (SELECT COUNT(DISTINCT CASE
+                    WHEN LTRIM(RTRIM(ISNULL(oh.slip_no, N''))) <> N'' THEN LTRIM(RTRIM(oh.slip_no))
+                    ELSE N'ROW-' + CAST(oh.outward_history_id AS NVARCHAR(50))
+                END)
+            FROM dbo.tbl_outward_history oh
+            WHERE oh.status = 1 AND oh.outward_date >= @monthStart AND oh.outward_date < @monthEnd) AS month_outward_challan,
+        (SELECT ISNULL(SUM(CAST(oh.qty_out AS BIGINT)), 0)
+            FROM dbo.tbl_outward_history oh
+            WHERE oh.status = 1 AND oh.outward_date >= @monthStart AND oh.outward_date < @monthEnd) AS month_outward_item;
+END
+GO
+
+/* --------------------- Dashboard trend (Last 30 days IN vs OUT) --------------------- */
+IF OBJECT_ID('dbo.sel_dashboard_trend_30days_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_dashboard_trend_30days_sp;
+GO
+CREATE PROCEDURE dbo.sel_dashboard_trend_30days_sp
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @today DATE = CAST(dbo.get_date() AS DATE);
+    DECLARE @start DATE = DATEADD(DAY, -29, @today);
+
+    ;WITH d AS (
+        SELECT @start AS dt
+        UNION ALL
+        SELECT DATEADD(DAY, 1, dt) FROM d WHERE dt < @today
+    )
+    SELECT
+        d.dt,
+        CONVERT(NVARCHAR(10), d.dt, 103) AS date_label,
+        ISNULL(inx.in_qty, 0) AS in_qty,
+        ISNULL(outx.out_qty, 0) AS out_qty
+    FROM d
+    OUTER APPLY (
+        SELECT SUM(CAST(dd.qty_inward AS BIGINT)) AS in_qty
+        FROM dbo.tbl_inward_challan h
+        INNER JOIN dbo.tbl_inward_challan_details dd ON dd.inward_id = h.inward_id AND dd.status = 1
+        WHERE h.status = 1 AND CAST(h.inward_date AS DATE) = d.dt
+    ) inx
+    OUTER APPLY (
+        SELECT SUM(CAST(oh.qty_out AS BIGINT)) AS out_qty
+        FROM dbo.tbl_outward_history oh
+        WHERE oh.status = 1 AND CAST(oh.outward_date AS DATE) = d.dt
+    ) outx
+    ORDER BY d.dt ASC
+    OPTION (MAXRECURSION 100);
 END
 GO
 
@@ -1293,6 +1389,7 @@ GO
 
 IF OBJECT_ID('dbo.get_invoice_for_edit_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.get_invoice_for_edit_sp;
 GO
+get_invoice_for_edit_sp 1
 CREATE PROCEDURE dbo.get_invoice_for_edit_sp
     @invoice_id NVARCHAR(50)
 AS

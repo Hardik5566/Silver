@@ -124,4 +124,14 @@ public class BAL_Inward
         cmd.Parameters.Add(p.stringparam("@inward_id", inward_id));
         return command.ExtQueryDS(cmd);
     }
+
+    public static DataSet dis_outward_history(string from_date, string to_date, string party_id)
+    {
+        SqlCommand cmd = new SqlCommand { CommandText = "dis_outward_history_sp" };
+        parameter p = new parameter();
+        cmd.Parameters.Add(p.stringparam("@from_date", from_date));
+        cmd.Parameters.Add(p.stringparam("@to_date", to_date));
+        cmd.Parameters.Add(p.stringparam("@party_id", party_id));
+        return command.ExtQueryDS(cmd);
+    }
 }
