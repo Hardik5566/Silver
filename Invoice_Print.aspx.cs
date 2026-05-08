@@ -12,6 +12,11 @@ public partial class Invoice_Print : Page
     /// <summary>Compact print format — single line, avoids awkward breaks in narrow columns.</summary>
     private const string PrintDateFormat = "dd/MM/yyyy";
 
+    // Seller & footer defaults (layout only; safe to edit as per your letterhead).
+    private const string SellerAddrDefault = "PLOT NO-253,2-ANKUR IND AREA,NEAR KOHINOOR PAINT\r\nSHAPER(VERAVAL) MO NO:-+91-9687822994";
+    private const string SellerGstinDefault = "";
+    private const string PlaceOfSupplyDefault = "24-Gujarat";
+
     private static readonly string[] NumUnits = { "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
         "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen" };
     private static readonly string[] NumTens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
@@ -52,6 +57,29 @@ public partial class Invoice_Print : Page
 
         string logoPath = Server.MapPath("~/image/thumbnail.jpg");
         pnl_logo.Visible = File.Exists(logoPath);
+
+        // Seller header (layout-only fields)
+        // Company name is already in logo (per requirement)
+        lit_seller_name2.Text = "";
+        lit_seller_addr.Text = HttpUtility.HtmlEncode(SellerAddrDefault);
+        lit_seller_gstin.Text = HttpUtility.HtmlEncode(SellerGstinDefault);
+        //lit_place_supply.Text = HttpUtility.HtmlEncode(PlaceOfSupplyDefault);
+        pnl_seller_gst.Visible = isGst;
+
+        // GSTIN line below items table (as per reference image)
+        if (isGst && !string.IsNullOrWhiteSpace(SellerGstinDefault))
+        {
+            pnl_gstin_bottom.Visible = true;
+            lit_gstin_bottom.Text = HttpUtility.HtmlEncode(SellerGstinDefault.Trim());
+        }
+        else
+        {
+            pnl_gstin_bottom.Visible = false;
+            lit_gstin_bottom.Text = "";
+        }
+
+        // Reference image shows "Debit Memo" at left for this invoice type
+        lit_left_badge.Text = HttpUtility.HtmlEncode("Debit Memo");
 
         lit_doc_title.Text = isGst
             ? HttpUtility.HtmlEncode("Tax Invoice")
@@ -102,14 +130,22 @@ public partial class Invoice_Print : Page
             pnl_tot_gst.Visible = true;
             pnl_tot_nongst.Visible = false;
             lit_sub_total.Text = HttpUtility.HtmlEncode(sub.ToString("N2", InvCulture));
-            lit_tax_total.Text = HttpUtility.HtmlEncode(tax.ToString("N2", InvCulture));
             lit_grand_total.Text = HttpUtility.HtmlEncode(grand.ToString("N2", InvCulture));
+
+            decimal half = Math.Round(tax / 2m, 2, MidpointRounding.AwayFromZero);
+            decimal roundOff = Math.Round(grand - (sub + tax), 2, MidpointRounding.AwayFromZero);
+            lit_cgst.Text = HttpUtility.HtmlEncode(half.ToString("N2", InvCulture));
+            lit_sgst.Text = HttpUtility.HtmlEncode((tax - half).ToString("N2", InvCulture));
+            lit_roundoff.Text = HttpUtility.HtmlEncode(roundOff.ToString("N2", InvCulture));
         }
         else
         {
             pnl_tot_gst.Visible = false;
             pnl_tot_nongst.Visible = true;
             lit_grand_only.Text = HttpUtility.HtmlEncode(grand.ToString("N2", InvCulture));
+            lit_sub_total_ng.Text = HttpUtility.HtmlEncode(sub.ToString("N2", InvCulture));
+            decimal roundOff = Math.Round(grand - sub, 2, MidpointRounding.AwayFromZero);
+            lit_roundoff_ng.Text = HttpUtility.HtmlEncode(roundOff.ToString("N2", InvCulture));
         }
 
         lit_amount_words.Text = HttpUtility.HtmlEncode(RupeesInWords(grand));
