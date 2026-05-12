@@ -1,5 +1,6 @@
 ﻿/*
-  Tables: Party → Unit → Part → User → Inward (header + lines + outward history) → Invoice
+  Tables: Party → Jobwork party → Jobwork challan (header + lines + return history) → Unit → Part → User
+          → Inward (header + lines + outward history) → Invoice
   Run order: Function.sql → Table.sql → StoreProcedure.sql
 */
 
@@ -159,6 +160,105 @@ CREATE INDEX IX_outward_history_inward_detail ON dbo.tbl_outward_history (inward
 GO
 
 CREATE INDEX IX_outward_history_date ON dbo.tbl_outward_history (outward_date DESC);
+GO
+
+/* --------------------- Jobwork (party, send challan, line qty, return history) — tables only, no indexes --------------------- */
+/*
+  Recreate jobwork tables (dev / empty DB): drop in child → parent order. Dropping dbo.tbl_jobwork_challan
+  first fails with Msg 3726 while dbo.tbl_jobwork_challan_detail exists.
+
+  DROP TABLE dbo.tbl_jobwork_return_history;
+  DROP TABLE dbo.tbl_jobwork_challan_detail;
+  DROP TABLE dbo.tbl_jobwork_challan;
+  DROP TABLE dbo.tbl_jobwork_party;
+*/
+
+CREATE TABLE dbo.tbl_jobwork_party (
+    jobwork_party_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    party_name NVARCHAR(100) NOT NULL,
+    contact_person NVARCHAR(100) NULL,
+    mobile_no NVARCHAR(15) NULL,
+    address NVARCHAR(MAX) NULL,
+    gst_no NVARCHAR(20) NULL,
+    status BIT NOT NULL DEFAULT 1,
+    create_by INT NULL,
+    create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+    modify_by INT NULL,
+    modify_date DATETIME NULL,
+    delete_by INT NULL,
+    delete_date DATETIME NULL
+);
+GO
+
+CREATE TABLE dbo.tbl_jobwork_challan (
+    jobwork_challan_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    jobwork_party_id BIGINT NOT NULL,
+    /* Regular party: parts on this challan belong to this party (tbl_party_master). */
+    party_id BIGINT NOT NULL,
+    challan_no NVARCHAR(50) NOT NULL,
+    challan_date DATETIME NOT NULL,
+    remarks NVARCHAR(MAX) NULL,
+    status BIT NOT NULL DEFAULT 1,
+    create_by INT NULL,
+    create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+    modify_by INT NULL,
+    modify_date DATETIME NULL,
+    delete_by INT NULL,
+    delete_date DATETIME NULL,
+    CONSTRAINT FK_jobwork_challan_party FOREIGN KEY (jobwork_party_id) REFERENCES dbo.tbl_jobwork_party (jobwork_party_id),
+    CONSTRAINT FK_jobwork_challan_item_party FOREIGN KEY (party_id) REFERENCES dbo.tbl_party_master (party_id)
+);
+GO
+/* If tbl_jobwork_challan already exists without party_id, run (after backfill): add column, FK, redeploy ins/upd SPs. */
+
+CREATE TABLE dbo.tbl_jobwork_challan_detail (
+    jobwork_detail_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    jobwork_challan_id BIGINT NOT NULL,
+    part_id BIGINT NOT NULL,
+    qty_sent INT NOT NULL,
+    qty_perfect_done INT NOT NULL DEFAULT 0,
+    qty_reject_done INT NOT NULL DEFAULT 0,
+    rate_at_time DECIMAL(18, 2) NULL,
+    status BIT NOT NULL DEFAULT 1,
+    create_by INT NULL,
+    create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+    modify_by INT NULL,
+    modify_date DATETIME NULL,
+    delete_by INT NULL,
+    delete_date DATETIME NULL,
+    CONSTRAINT FK_jobwork_detail_header FOREIGN KEY (jobwork_challan_id) REFERENCES dbo.tbl_jobwork_challan (jobwork_challan_id),
+    CONSTRAINT FK_jobwork_detail_part FOREIGN KEY (part_id) REFERENCES dbo.tbl_part_master (part_id),
+    CONSTRAINT CK_jobwork_detail_qty CHECK (
+        qty_sent > 0
+        AND qty_perfect_done >= 0
+        AND qty_reject_done >= 0
+        AND (qty_perfect_done + qty_reject_done) <= qty_sent
+    )
+);
+GO
+
+CREATE TABLE dbo.tbl_jobwork_return_history (
+    jobwork_return_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    jobwork_detail_id BIGINT NOT NULL,
+    qty_perfect INT NOT NULL DEFAULT 0,
+    qty_reject INT NOT NULL DEFAULT 0,
+    return_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+    slip_no NVARCHAR(50) NULL,
+    remarks NVARCHAR(MAX) NULL,
+    status BIT NOT NULL DEFAULT 1,
+    create_by INT NULL,
+    create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+    modify_by INT NULL,
+    modify_date DATETIME NULL,
+    delete_by INT NULL,
+    delete_date DATETIME NULL,
+    CONSTRAINT FK_jobwork_return_detail FOREIGN KEY (jobwork_detail_id) REFERENCES dbo.tbl_jobwork_challan_detail (jobwork_detail_id),
+    CONSTRAINT CK_jobwork_return_qty CHECK (
+        qty_perfect >= 0
+        AND qty_reject >= 0
+        AND (qty_perfect + qty_reject) > 0
+    )
+);
 GO
 
 /* --------------------- Invoice (header + lines, links to inward detail) --------------------- */

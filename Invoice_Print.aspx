@@ -17,7 +17,7 @@
             background: #fff;
         }
 
-        .no-print {
+        .no-print {Invoice_Print
             text-align: center;
             padding: 12px 16px;
             background: #2f3542;
@@ -469,7 +469,7 @@
                         <td class="inv-head-meta">
                             <table class="inv-meta-box" role="presentation">
                                 <tr>
-                                    <td class="k">Invoice No.</td>
+                                    <td class="k">PO. No.</td>
                                     <td class="v"><asp:Literal ID="lit_inv_no" runat="server" /></td>
                                 </tr>
                                 <tr>
@@ -543,7 +543,7 @@
                 </div>
 
                 <div class="inv-footer">
-                    Computer-generated invoice. E. &amp; O.E.
+                    Computer-generated Purchase Order
                 </div>
             </div>
         </asp:Panel>

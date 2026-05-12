@@ -159,6 +159,12 @@
                             <div class="menu-title">User</div>
                         </a>
                     </li>
+                    <li>
+                        <a href="Jobwork_Party_Master.aspx">
+                            <div class="parent-icon"><i class="bi bi-briefcase"></i></div>
+                            <div class="menu-title">Jobwork party</div>
+                        </a>
+                    </li>
 
                     <li class="menu-label">Challan</li>
                     <li>
@@ -186,6 +192,32 @@
                         </a>
                     </li>
 
+                    <li class="menu-label">Jobwork</li>
+                    <li>
+                        <a href="Jobwork_Challan_Entry.aspx">
+                            <div class="parent-icon"><i class="bi bi-plus-circle"></i></div>
+                            <div class="menu-title">New jobwork challan</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Jobwork_Challan_List.aspx">
+                            <div class="parent-icon"><i class="bi bi-arrow-up-circle"></i></div>
+                            <div class="menu-title">Active jobwork challans</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Jobwork_Challan_Report.aspx">
+                            <div class="parent-icon"><i class="bi bi-clock-history"></i></div>
+                            <div class="menu-title">Jobwork challan history</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Jobwork_Receive_History.aspx">
+                            <div class="parent-icon"><i class="bi bi-truck"></i></div>
+                            <div class="menu-title">Jobwork receive history</div>
+                        </a>
+                    </li>
+
                     <li class="menu-label">Invoice</li>
                     <li>
                         <a href="Invoice_Entry.aspx">
@@ -197,6 +229,16 @@
                         <a href="Invoice_List.aspx">
                             <div class="parent-icon"><i class="bi bi-journal-text"></i></div>
                             <div class="menu-title">Invoice list</div>
+                        </a>
+                    </li>
+
+                    <li class="menu-label">Report</li>
+                    <li>
+                        <a href="Monthly_Inward_Report.aspx">
+                            <div class="parent-icon">
+                                <i class="bi bi-journal-text"></i>
+                            </div>
+                            <div class="menu-title">Monthly inward report</div>
                         </a>
                     </li>
 

@@ -46,6 +46,62 @@ public static class InwardChallanLineHtml
         return sb.ToString();
     }
 
+    /// <summary>Same sheet layout as inward, using jobwork list columns: item_list, items_returned, items_pending.</summary>
+    public static string BuildJobworkPartsSheet(DataRowView drv)
+    {
+        if (drv == null) return "";
+        string itemList = drv["item_list"] != DBNull.Value ? drv["item_list"].ToString() : "";
+        string itemsRet = drv["items_returned"] != DBNull.Value ? drv["items_returned"].ToString() : "";
+        string itemsPend = drv["items_pending"] != DBNull.Value ? drv["items_pending"].ToString() : "";
+
+        string[] ins = SplitAgg(itemList);
+        string[] rets = SplitAgg(itemsRet);
+        string[] pends = SplitAgg(itemsPend);
+        int n = Math.Max(Math.Max(ins.Length, rets.Length), pends.Length);
+
+        if (n == 0)
+            return "<span class=\"text-muted small\">No lines</span>";
+
+        var sb = new StringBuilder();
+        sb.Append("<div class=\"inward-line-box\"><div class=\"inward-sheet\" role=\"group\" aria-label=\"Jobwork lines\"><div class=\"inward-sheet__body\">");
+
+        for (int i = 0; i < n; i++)
+        {
+            string nIn, qIn, nRet, qRet, nPen, qPen;
+            SplitNameQty(i < ins.Length ? ins[i] : "", out nIn, out qIn);
+            SplitNameQty(i < rets.Length ? rets[i] : "", out nRet, out qRet);
+            SplitNameQty(i < pends.Length ? pends[i] : "", out nPen, out qPen);
+
+            string item = !string.IsNullOrEmpty(nIn) ? nIn : (!string.IsNullOrEmpty(nPen) ? nPen : nRet);
+
+            sb.Append("<div class=\"inward-sheet__row\"><span class=\"inward-sheet__item\">").Append(Enc(item)).Append("</span>");
+            AppendNumCellJobwork(sb, qIn, "qty");
+            AppendNumCellJobwork(sb, qRet, "out");
+            AppendNumCellJobwork(sb, qPen, "pend");
+            sb.Append("</div>");
+        }
+
+        sb.Append("</div></div></div>");
+        return sb.ToString();
+    }
+
+    private static string ColTitleJobwork(string col)
+    {
+        if (col == "qty") return "Quantity sent";
+        if (col == "out") return "Quantity returned";
+        return "Quantity pending";
+    }
+
+    private static void AppendNumCellJobwork(StringBuilder sb, string q, string col)
+    {
+        sb.Append("<span class=\"inward-sheet__num inward-sheet__num--").Append(col);
+        if (string.IsNullOrEmpty(q)) sb.Append(" inward-sheet__num--empty");
+        sb.Append("\" title=\"").Append(System.Web.HttpUtility.HtmlAttributeEncode(ColTitleJobwork(col))).Append("\">");
+        sb.Append(ColIconHtml(col));
+        sb.Append(string.IsNullOrEmpty(q) ? "<span class=\"inward-sheet__dash\">&#8211;</span>" : Enc(q));
+        sb.Append("</span>");
+    }
+
     private static string[] SplitAgg(string raw)
     {
         string s = raw == null ? "" : raw.Trim();

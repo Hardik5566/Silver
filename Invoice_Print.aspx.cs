@@ -79,11 +79,11 @@ public partial class Invoice_Print : Page
         }
 
         // Reference image shows "Debit Memo" at left for this invoice type
-        lit_left_badge.Text = HttpUtility.HtmlEncode("Debit Memo");
+        lit_left_badge.Text = HttpUtility.HtmlEncode("");
 
         lit_doc_title.Text = isGst
-            ? HttpUtility.HtmlEncode("Tax Invoice")
-            : HttpUtility.HtmlEncode("Bill of Supply");
+            ? HttpUtility.HtmlEncode("Purchase Order")
+            : HttpUtility.HtmlEncode("Purchase Order");
 
         lit_inv_no.Text = HttpUtility.HtmlEncode(inv["invoice_no"].ToString());
         DateTime invDate = Convert.ToDateTime(inv["invoice_date"], CultureInfo.InvariantCulture);
