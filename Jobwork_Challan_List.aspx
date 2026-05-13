@@ -102,7 +102,6 @@
                         </asp:TemplateField>
                         <asp:BoundField DataField="challan_date" HeaderText="Date" DataFormatString="{0:dd-MMM-yyyy}" HtmlEncode="true" ItemStyle-CssClass="text-nowrap" />
                         <asp:BoundField DataField="challan_no" HeaderText="Challan no" ItemStyle-CssClass="fw-medium text-nowrap" />
-                        <asp:BoundField DataField="item_party_name" HeaderText="Party (items)" />
                         <asp:BoundField DataField="jobwork_party_name" HeaderText="Jobwork party" />
                         <asp:TemplateField HeaderText="Parts">
                             <ItemTemplate>

@@ -33,12 +33,8 @@
     <div class="card mb-3 shadow-sm">
         <div class="card-body row g-3">
             <div class="col-lg-4 col-md-6">
-                <label class="form-label">Party <span class="text-muted small">(items / parts)</span></label>
-                <asp:DropDownList ID="ddl_party" runat="server" CssClass="form-select" AutoPostBack="true" OnSelectedIndexChanged="ddl_party_SelectedIndexChanged" AccessKey="i"></asp:DropDownList>
-            </div>
-            <div class="col-lg-4 col-md-6">
                 <label class="form-label">Jobwork party</label>
-                <asp:DropDownList ID="ddl_jobwork_party" runat="server" CssClass="form-select" AccessKey="p"></asp:DropDownList>
+                <asp:DropDownList ID="ddl_jobwork_party" runat="server" CssClass="form-select" AutoPostBack="true" OnSelectedIndexChanged="ddl_jobwork_party_SelectedIndexChanged" AccessKey="p"></asp:DropDownList>
             </div>
             <div class="col-lg-2 col-md-3">
                 <label class="form-label">Challan no</label>

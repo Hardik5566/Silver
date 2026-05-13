@@ -20,19 +20,18 @@ public partial class Home : System.Web.UI.Page
 
         lit_count_party.Text = F(r, "total_party");
         lit_count_part.Text = F(r, "total_part");
+        lit_count_jobwork_party.Text = F(r, "total_jobwork_party");
+        lit_count_jobwork_part.Text = F(r, "total_jobwork_part");
 
         lit_count_active_challan.Text = F(r, "total_active_challan");
         lit_count_active_item.Text = F(r, "total_active_item_qty");
-        lit_in_today_item.Text = F(r, "today_item_received");
-        lit_in_month_item.Text = F(r, "month_item_received");
+
+        lit_jw_active_challan.Text = F(r, "jw_active_challan");
+        lit_jw_pending_qty.Text = F(r, "jw_active_pending_qty");
 
         lit_out_today_item.Text = F(r, "today_outward_item");
         lit_out_month_item.Text = F(r, "month_outward_item");
 
-        lit_jw_active_challan.Text = F(r, "jw_active_challan");
-        lit_jw_pending_qty.Text = F(r, "jw_active_pending_qty");
-        lit_jw_today_challan.Text = F(r, "jw_today_challan_sent");
-        lit_jw_today_sent_qty.Text = F(r, "jw_today_qty_sent");
         lit_jw_today_recv_qty.Text = F(r, "jw_today_receive_qty");
         lit_jw_month_recv_qty.Text = F(r, "jw_month_receive_qty");
     }

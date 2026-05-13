@@ -51,9 +51,10 @@
 
             <header class="top-header">
                 <nav class="navbar navbar-expand gap-3">
-                    <div class="mobile-toggle-icon fs-3 d-flex d-lg-none">
-                        <i class="bi bi-list"></i>
-                    </div>
+                    <button type="button" class="mobile-toggle-icon btn btn-link text-secondary d-flex d-lg-none align-items-center gap-2 p-2 border-0 bg-transparent text-decoration-none" aria-label="Open navigation menu">
+                        <i class="bi bi-list fs-3"></i>
+                        <span class="fw-semibold">Menu</span>
+                    </button>
 
                     <div class="top-navbar-right ms-auto">
                         <ul class="navbar-nav align-items-center gap-1">
@@ -119,40 +120,22 @@
                 <!--navigation-->
                 <ul class="metismenu" id="menu">
                     <li>
-                        <a href="Home.aspx">
+                        <a href="Home.aspx" title="Dashboard">
                             <div class="parent-icon">
                                 <i class="bi bi-house-fill"></i>
                             </div>
                             <div class="menu-title">Dashboard</div>
                         </a>
                     </li>
+                    <li>
+                        <a href="Expense_Tracker.aspx" title="Expense">
+                            <div class="parent-icon"><i class="bi bi-wallet"></i></div>
+                            <div class="menu-title">Expense</div>
+                        </a>
+                    </li>
                     <li class="menu-label">MASTER</li>
                     <li>
-                        <a href="Party_Master.aspx">
-                            <div class="parent-icon">
-                                <i class="bi bi-person-fill"></i>
-                            </div>
-                            <div class="menu-title">Party</div>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="Part_Master.aspx">
-                            <div class="parent-icon">
-                                <i class="bi bi-box-seam"></i>
-                            </div>
-                            <div class="menu-title">Part</div>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="Unit_Master.aspx">
-                            <div class="parent-icon">
-                                <i class="bi bi-box"></i>
-                            </div>
-                            <div class="menu-title">Unit</div>
-                        </a>
-                    </li>
-                    <li>
-                        <a href="User_Master.aspx">
+                        <a href="User_Master.aspx" title="User">
                             <div class="parent-icon">
                                 <i class="bi bi-person-badge-fill"></i>
                             </div>
@@ -160,33 +143,63 @@
                         </a>
                     </li>
                     <li>
-                        <a href="Jobwork_Party_Master.aspx">
+                        <a href="Unit_Master.aspx" title="Unit">
+                            <div class="parent-icon">
+                                <i class="bi bi-box"></i>
+                            </div>
+                            <div class="menu-title">Unit</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Party_Master.aspx" title="Party">
+                            <div class="parent-icon">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                            <div class="menu-title">Party</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Jobwork_Party_Master.aspx" title="Jobwork party">
                             <div class="parent-icon"><i class="bi bi-briefcase"></i></div>
                             <div class="menu-title">Jobwork party</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Part_Master.aspx" title="Part">
+                            <div class="parent-icon">
+                                <i class="bi bi-box-seam"></i>
+                            </div>
+                            <div class="menu-title">Part</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Jobwork_Part_Master.aspx" title="Jobwork part">
+                            <div class="parent-icon"><i class="bi bi-box-seam"></i></div>
+                            <div class="menu-title">Jobwork part</div>
                         </a>
                     </li>
 
                     <li class="menu-label">Challan</li>
                     <li>
-                        <a href="Inward_Challan_Entry.aspx">
+                        <a href="Inward_Challan_Entry.aspx" title="New challan entry">
                             <div class="parent-icon"><i class="bi bi-plus-circle"></i></div>
                             <div class="menu-title">New challan entry</div>
                         </a>
                     </li>
                     <li>
-                        <a href="Inward_Challan_List.aspx">
+                        <a href="Inward_Challan_List.aspx" title="Active challans">
                             <div class="parent-icon"><i class="bi bi-arrow-down-circle"></i></div>
                             <div class="menu-title">Active challans</div>
                         </a>
                     </li>
                     <li>
-                        <a href="Inward_Challan_Report.aspx">
+                        <a href="Inward_Challan_Report.aspx" title="Challan history">
                             <div class="parent-icon"><i class="bi bi-clock-history"></i></div>
                             <div class="menu-title">Challan history</div>
                         </a>
                     </li>
                     <li>
-                        <a href="Outward_History.aspx">
+                        <a href="Outward_History.aspx" title="Outward history">
                             <div class="parent-icon"><i class="bi bi-truck"></i></div>
                             <div class="menu-title">Outward history</div>
                         </a>
@@ -194,25 +207,25 @@
 
                     <li class="menu-label">Jobwork</li>
                     <li>
-                        <a href="Jobwork_Challan_Entry.aspx">
+                        <a href="Jobwork_Challan_Entry.aspx" title="New jobwork challan">
                             <div class="parent-icon"><i class="bi bi-plus-circle"></i></div>
                             <div class="menu-title">New jobwork challan</div>
                         </a>
                     </li>
                     <li>
-                        <a href="Jobwork_Challan_List.aspx">
+                        <a href="Jobwork_Challan_List.aspx" title="Active jobwork challans">
                             <div class="parent-icon"><i class="bi bi-arrow-up-circle"></i></div>
                             <div class="menu-title">Active jobwork challans</div>
                         </a>
                     </li>
                     <li>
-                        <a href="Jobwork_Challan_Report.aspx">
+                        <a href="Jobwork_Challan_Report.aspx" title="Jobwork challan history">
                             <div class="parent-icon"><i class="bi bi-clock-history"></i></div>
                             <div class="menu-title">Jobwork challan history</div>
                         </a>
                     </li>
                     <li>
-                        <a href="Jobwork_Receive_History.aspx">
+                        <a href="Jobwork_Receive_History.aspx" title="Jobwork receive history">
                             <div class="parent-icon"><i class="bi bi-truck"></i></div>
                             <div class="menu-title">Jobwork receive history</div>
                         </a>

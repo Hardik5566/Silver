@@ -135,7 +135,6 @@
             letter-spacing: .1em;
             text-transform: uppercase;
         }
-
         .jw-head-row {
             display: table;
             width: 100%;
@@ -212,32 +211,36 @@
             text-transform: uppercase;
             letter-spacing: .04em;
         }
-        .jw-line-table th.jw-th-sr { width: 9%; text-align: center; }
+        .jw-line-table th.jw-th-sr { width: 8%; text-align: center; }
+        .jw-line-table th.jw-th-item { width: 44%; }
         .jw-line-table th.jw-th-qty { width: 18%; text-align: right; }
+        .jw-line-table th.jw-th-num { width: 15%; text-align: right; font-size: 7pt; padding-left: 2pt; padding-right: 4pt; }
         .jw-line-table td {
             padding: 3pt 6pt;
             border: 0.5pt solid #666;
             vertical-align: top;
         }
         .jw-line-table td.jw-td-sr { text-align: center; font-weight: 600; }
-        .jw-line-table td.jw-td-qty {
+        .jw-line-table td.jw-td-qty,
+        .jw-line-table td.jw-td-num {
             text-align: right;
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
             font-weight: 600;
         }
+        .jw-line-table td.jw-td-num--dash { font-weight: 500; color: #555; }
         .jw-line-table .jw-item { font-weight: 600; word-wrap: break-word; }
+        .jw-line-table td.jw-td-qty--unit { white-space: normal; word-break: break-word; }
 
-        .jw-total-qty {
-            margin-top: 5pt;
-            padding: 4pt 6pt;
-            font-size: 9.5pt;
-            text-align: right;
+        .jw-line-table tfoot tr.jw-line-tfoot td {
             border: 1pt solid #000;
-            border-top: none;
-            background: #f3f3f3;
+            border-top: 2pt solid #000;
+            background: #ececec;
+            font-weight: 700;
+            padding: 5pt 6pt;
+            font-size: 9.5pt;
         }
-        .jw-total-qty strong { font-variant-numeric: tabular-nums; }
+        .jw-line-table tfoot tr.jw-line-tfoot td.jw-td-sr { background: #ececec; }
 
         .jw-remarks {
             margin-top: 6pt;
@@ -339,15 +342,10 @@
             .jw-party-simple { margin-bottom: 4pt !important; font-size: 8.5pt !important; }
             .jw-party-simple .jw-party-lbl { padding-right: 6pt !important; }
 
-            .jw-line-table { font-size: 7.5pt !important; }
-            .jw-line-table th { padding: 2pt 4pt !important; font-size: 7pt !important; }
-            .jw-line-table td { padding: 2pt 4pt !important; }
-
-            .jw-total-qty {
-                margin-top: 0 !important;
-                padding: 3pt 6pt !important;
-                font-size: 8.5pt !important;
-            }
+            .jw-line-table { font-size: 6.5pt !important; }
+            .jw-line-table th { padding: 2pt 3pt !important; font-size: 6.5pt !important; }
+            .jw-line-table td { padding: 2pt 3pt !important; }
+            .jw-line-table tfoot tr.jw-line-tfoot td { font-size: 8.5pt !important; padding: 3pt 4pt !important; }
 
             .jw-remarks {
                 margin-top: 4pt !important;
@@ -356,6 +354,7 @@
             }
 
             .jw-line-table thead { display: table-header-group; }
+            .jw-line-table tfoot { display: table-footer-group; }
         }
     </style>
 </head>

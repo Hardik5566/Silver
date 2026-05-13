@@ -10,7 +10,7 @@ public partial class Jobwork_Receive_History : Page
         if (!IsPostBack)
         {
             ApplyPresetFromQuery();
-            BindParty();
+            BindJobworkParty();
             BindGrid();
         }
     }
@@ -29,21 +29,21 @@ public partial class Jobwork_Receive_History : Page
         txt_to.Text = DateTime.Today.ToString("yyyy-MM-dd");
     }
 
-    private void BindParty()
+    private void BindJobworkParty()
     {
-        ddl_party.Items.Clear();
-        ddl_party.Items.Add(new ListItem("All parties", "0"));
-        DataSet ds = BAL_Party.dis_party();
+        ddl_jobwork_party.Items.Clear();
+        ddl_jobwork_party.Items.Add(new ListItem("All jobwork parties", "0"));
+        DataSet ds = BAL_JobworkParty.dis_jobwork_party();
         if (ds.Tables.Count > 0)
         {
             foreach (DataRow r in ds.Tables[0].Rows)
-                ddl_party.Items.Add(new ListItem(r["party_name"].ToString(), r["party_id"].ToString()));
+                ddl_jobwork_party.Items.Add(new ListItem(r["party_name"].ToString(), r["jobwork_party_id"].ToString()));
         }
     }
 
     private void BindGrid()
     {
-        DataSet ds = BAL_JobworkChallan.dis_jobwork_receive_history(txt_from.Text, txt_to.Text, ddl_party.SelectedValue);
+        DataSet ds = BAL_JobworkChallan.dis_jobwork_receive_history(txt_from.Text, txt_to.Text, ddl_jobwork_party.SelectedValue);
         grid_recv.DataSource = ds.Tables.Count > 0 ? ds.Tables[0] : null;
         grid_recv.DataBind();
     }

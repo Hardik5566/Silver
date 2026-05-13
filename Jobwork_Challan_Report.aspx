@@ -65,8 +65,8 @@
                     <asp:TextBox ID="txt_to" runat="server" CssClass="form-control" TextMode="Date"></asp:TextBox>
                 </div>
                 <div class="col-md-5 col-sm-6">
-                    <label class="form-label">Party (items)</label>
-                    <asp:DropDownList ID="ddl_party" runat="server" CssClass="form-select"></asp:DropDownList>
+                    <label class="form-label">Jobwork party</label>
+                    <asp:DropDownList ID="ddl_jobwork_party" runat="server" CssClass="form-select"></asp:DropDownList>
                 </div>
                 <div class="col-md-3 col-sm-6 d-flex align-items-end">
                     <asp:Button ID="btn_filter" runat="server" CssClass="btn btn-primary w-100" Text="Apply filter" OnClick="btn_filter_Click" />
@@ -92,7 +92,6 @@
                         </asp:TemplateField>
                         <asp:BoundField DataField="challan_date" HeaderText="Date" DataFormatString="{0:dd-MMM-yyyy}" HtmlEncode="true" ItemStyle-CssClass="text-nowrap" />
                         <asp:BoundField DataField="challan_no" HeaderText="Challan no" ItemStyle-CssClass="fw-semibold text-nowrap" />
-                        <asp:BoundField DataField="item_party_name" HeaderText="Party (items)" />
                         <asp:BoundField DataField="jobwork_party_name" HeaderText="Jobwork party" />
                         <asp:TemplateField HeaderText="Parts">
                             <ItemTemplate>

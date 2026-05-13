@@ -61,7 +61,6 @@ public partial class Jobwork_Challan_Entry : Page
 
         if (!IsPostBack)
         {
-            BindParty();
             BindJobworkParty();
             if (!string.IsNullOrEmpty(id))
             {
@@ -90,15 +89,15 @@ public partial class Jobwork_Challan_Entry : Page
     private void RegisterPartRatesMap()
     {
         var sb = new StringBuilder("window.jobworkPartRates={");
-        if (ddl_party.SelectedValue != "0")
+        if (ddl_jobwork_party.SelectedValue != "0")
         {
-            DataSet ds = BAL_Part.dis_part(ddl_party.SelectedValue);
+            DataSet ds = BAL_JobworkPart.dis_jobwork_part(ddl_jobwork_party.SelectedValue);
             if (ds.Tables.Count > 0)
             {
                 bool first = true;
                 foreach (DataRow r in ds.Tables[0].Rows)
                 {
-                    string pid = r["part_id"].ToString();
+                    string pid = r["jobwork_part_id"].ToString();
                     decimal rate = r["rate"] != DBNull.Value ? Convert.ToDecimal(r["rate"], CultureInfo.InvariantCulture) : 0m;
                     string rateStr = rate.ToString(CultureInfo.InvariantCulture);
                     if (!first) sb.Append(",");
@@ -119,11 +118,10 @@ public partial class Jobwork_Challan_Entry : Page
 
     private void ApplyHeaderTabOrder()
     {
-        ddl_party.TabIndex = (short)1;
-        ddl_jobwork_party.TabIndex = (short)2;
-        txt_challan_no.TabIndex = (short)3;
-        txt_challan_date.TabIndex = (short)4;
-        txt_remarks.TabIndex = (short)5;
+        ddl_jobwork_party.TabIndex = (short)1;
+        txt_challan_no.TabIndex = (short)2;
+        txt_challan_date.TabIndex = (short)3;
+        txt_remarks.TabIndex = (short)4;
     }
 
     private void ApplyFooterTabOrder()
@@ -131,18 +129,6 @@ public partial class Jobwork_Challan_Entry : Page
         int n = rep_lines.Items.Count;
         int lastFieldTab = n > 0 ? 10 + (n - 1) * 3 + 2 : 5;
         btn_save.TabIndex = (short)(lastFieldTab + 2);
-    }
-
-    private void BindParty()
-    {
-        ddl_party.Items.Clear();
-        ddl_party.Items.Add(new ListItem("-- Select party (items) --", "0"));
-        DataSet ds = BAL_Party.dis_party();
-        if (ds.Tables.Count > 0)
-        {
-            foreach (DataRow r in ds.Tables[0].Rows)
-                ddl_party.Items.Add(new ListItem(r["party_name"].ToString(), r["party_id"].ToString()));
-        }
     }
 
     private void BindJobworkParty()
@@ -166,10 +152,6 @@ public partial class Jobwork_Challan_Entry : Page
             return;
         }
         DataRow h = ds.Tables[0].Rows[0];
-        string pid = h["party_id"].ToString();
-        var pli = ddl_party.Items.FindByValue(pid);
-        if (pli != null)
-            ddl_party.SelectedValue = pid;
         ddl_jobwork_party.SelectedValue = h["jobwork_party_id"].ToString();
         txt_challan_no.Text = h["challan_no"].ToString();
         txt_challan_date.Text = Convert.ToDateTime(h["challan_date"]).ToString("yyyy-MM-dd");
@@ -179,7 +161,7 @@ public partial class Jobwork_Challan_Entry : Page
         {
             list.Add(new InwardLineVm
             {
-                PartId = r["part_id"].ToString(),
+                PartId = r["jobwork_part_id"].ToString(),
                 Qty = r["qty_sent"].ToString(),
                 Rate = r["rate_at_time"] != DBNull.Value ? r["rate_at_time"].ToString() : "0"
             });
@@ -214,7 +196,7 @@ public partial class Jobwork_Challan_Entry : Page
         Lines = list;
     }
 
-    protected void ddl_party_SelectedIndexChanged(object sender, EventArgs e)
+    protected void ddl_jobwork_party_SelectedIndexChanged(object sender, EventArgs e)
     {
         SyncLinesFromRepeater();
         Lines = new List<InwardLineVm> { new InwardLineVm() };
@@ -228,11 +210,11 @@ public partial class Jobwork_Challan_Entry : Page
         if (ddl == null) return;
         ddl.Items.Clear();
         ddl.Items.Add(new ListItem("-- Part --", "0"));
-        if (ddl_party.SelectedValue == "0") return;
-        DataSet ds = BAL_Part.dis_part(ddl_party.SelectedValue);
+        if (ddl_jobwork_party.SelectedValue == "0") return;
+        DataSet ds = BAL_JobworkPart.dis_jobwork_part(ddl_jobwork_party.SelectedValue);
         if (ds.Tables.Count == 0) return;
         foreach (DataRow r in ds.Tables[0].Rows)
-            ddl.Items.Add(new ListItem(r["part_name"].ToString(), r["part_id"].ToString()));
+            ddl.Items.Add(new ListItem(r["part_name"].ToString(), r["jobwork_part_id"].ToString()));
         var row = (InwardLineVm)e.Item.DataItem;
         if (row != null && !string.IsNullOrEmpty(row.PartId) && row.PartId != "0")
         {
@@ -285,11 +267,6 @@ public partial class Jobwork_Challan_Entry : Page
                 SyncLinesFromRepeater();
                 lineList = Lines;
             }
-            if (ddl_party.SelectedValue == "0")
-            {
-                ShowMsg("Select party (items).", Msg.Warning);
-                return;
-            }
             if (ddl_jobwork_party.SelectedValue == "0")
             {
                 ShowMsg("Select jobwork party.", Msg.Warning);
@@ -329,9 +306,9 @@ public partial class Jobwork_Challan_Entry : Page
             string by = Session["user_id"].ToString();
             DataSet ds;
             if (string.IsNullOrEmpty(hd_jobwork_challan_id.Value))
-                ds = BAL_JobworkChallan.ins_jobwork_challan(ddl_party.SelectedValue, ddl_jobwork_party.SelectedValue, txt_challan_date.Text, txt_remarks.Text, by, partIds, qtys, rates);
+                ds = BAL_JobworkChallan.ins_jobwork_challan(ddl_jobwork_party.SelectedValue, txt_challan_date.Text, txt_remarks.Text, by, partIds, qtys, rates);
             else
-                ds = BAL_JobworkChallan.upd_jobwork_challan(hd_jobwork_challan_id.Value, ddl_party.SelectedValue, ddl_jobwork_party.SelectedValue, txt_challan_date.Text, txt_remarks.Text, by, partIds, qtys, rates);
+                ds = BAL_JobworkChallan.upd_jobwork_challan(hd_jobwork_challan_id.Value, ddl_jobwork_party.SelectedValue, txt_challan_date.Text, txt_remarks.Text, by, partIds, qtys, rates);
 
             if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
             {

@@ -98,21 +98,7 @@ public partial class Jobwork_Challan_List : Page
         DataRow h = ds.Tables[0].Rows[0];
         string challan = System.Web.HttpUtility.HtmlEncode(h["challan_no"].ToString());
         string dateStr = System.Web.HttpUtility.HtmlEncode(Convert.ToDateTime(h["challan_date"]).ToString("dd-MMM-yyyy"));
-        string partyId = h["party_id"].ToString();
         string jwPartyId = h["jobwork_party_id"].ToString();
-        string itemPartyName = "";
-        DataSet dsp = BAL_Party.dis_party();
-        if (dsp.Tables.Count > 0)
-        {
-            foreach (DataRow r in dsp.Tables[0].Rows)
-            {
-                if (r["party_id"].ToString() == partyId)
-                {
-                    itemPartyName = System.Web.HttpUtility.HtmlEncode(r["party_name"].ToString());
-                    break;
-                }
-            }
-        }
         string jwName = "";
         DataSet dsj = BAL_JobworkParty.dis_jobwork_party();
         if (dsj.Tables.Count > 0)
@@ -126,7 +112,7 @@ public partial class Jobwork_Challan_List : Page
                 }
             }
         }
-        lit_recv_meta.Text = "<strong>" + challan + "</strong> &nbsp;|&nbsp; Items: " + itemPartyName + " &nbsp;|&nbsp; Jobwork: " + jwName + " &nbsp;|&nbsp; " + dateStr;
+        lit_recv_meta.Text = "<strong>" + challan + "</strong> &nbsp;|&nbsp; " + jwName + " &nbsp;|&nbsp; " + dateStr;
     }
 
     protected void btn_save_all_receive_Click(object sender, EventArgs e)

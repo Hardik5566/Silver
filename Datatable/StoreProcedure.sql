@@ -268,6 +268,147 @@ BEGIN
 END
 GO
 
+/* ==================== JOBWORK PART (separate from tbl_part_master) ==================== */
+
+IF OBJECT_ID('dbo.ins_jobwork_part_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_jobwork_part_sp;
+GO
+CREATE PROCEDURE dbo.ins_jobwork_part_sp
+    @jobwork_party_id NVARCHAR(50),
+    @part_name NVARCHAR(250),
+    @unit_id NVARCHAR(50),
+    @rate NVARCHAR(50),
+    @tax_per NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @jwp BIGINT = CAST(@jobwork_party_id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_party WHERE jobwork_party_id = @jwp AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Jobwork party not found or inactive.' AS Message;
+            RETURN;
+        END
+        IF EXISTS (
+            SELECT 1 FROM dbo.tbl_jobwork_part_master
+            WHERE jobwork_party_id = @jwp AND part_name = @part_name AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Duplicate part name for this jobwork party.' AS Message;
+            RETURN;
+        END
+        INSERT INTO dbo.tbl_jobwork_part_master (jobwork_party_id, part_name, unit_id, rate, tax_per, status, create_by, create_date)
+        VALUES (
+            @jwp, @part_name,
+            NULLIF(CAST(NULLIF(LTRIM(RTRIM(@unit_id)), N'') AS BIGINT), 0),
+            CAST(@rate AS DECIMAL(18, 2)), CAST(@tax_per AS DECIMAL(18, 2)),
+            1, @uid, dbo.get_date());
+        SELECT 'True' AS Success, N'Saved.' AS Message, CAST(SCOPE_IDENTITY() AS BIGINT) AS jobwork_part_id;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.upd_jobwork_part_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.upd_jobwork_part_sp;
+GO
+CREATE PROCEDURE dbo.upd_jobwork_part_sp
+    @jobwork_part_id NVARCHAR(50),
+    @jobwork_party_id NVARCHAR(50),
+    @part_name NVARCHAR(250),
+    @unit_id NVARCHAR(50),
+    @rate NVARCHAR(50),
+    @tax_per NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @jid BIGINT = CAST(@jobwork_part_id AS BIGINT);
+        DECLARE @jwp BIGINT = CAST(@jobwork_party_id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+        IF EXISTS (
+            SELECT 1 FROM dbo.tbl_jobwork_part_master
+            WHERE jobwork_party_id = @jwp AND part_name = @part_name AND jobwork_part_id <> @jid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Duplicate part name for this jobwork party.' AS Message;
+            RETURN;
+        END
+        UPDATE dbo.tbl_jobwork_part_master
+        SET jobwork_party_id = @jwp, part_name = @part_name,
+            unit_id = NULLIF(CAST(NULLIF(LTRIM(RTRIM(@unit_id)), N'') AS BIGINT), 0),
+            rate = CAST(@rate AS DECIMAL(18, 2)), tax_per = CAST(@tax_per AS DECIMAL(18, 2)),
+            modify_by = @uid, modify_date = dbo.get_date()
+        WHERE jobwork_part_id = @jid AND status = 1;
+        SELECT 'True' AS Success, N'Updated.' AS Message;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.sel_jobwork_part_by_id_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_jobwork_part_by_id_sp;
+GO
+CREATE PROCEDURE dbo.sel_jobwork_part_by_id_sp
+    @id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT jobwork_part_id, jobwork_party_id, part_name, unit_id, rate, tax_per
+    FROM dbo.tbl_jobwork_part_master
+    WHERE jobwork_part_id = CAST(@id AS BIGINT) AND status = 1;
+END
+GO
+
+IF OBJECT_ID('dbo.dis_jobwork_part_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_jobwork_part_sp;
+GO
+CREATE PROCEDURE dbo.dis_jobwork_part_sp
+    @jobwork_party_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @jw BIGINT = CAST(@jobwork_party_id AS BIGINT);
+    SELECT
+        j.jobwork_part_id,
+        jp.party_name AS jobwork_party_name,
+        j.part_name,
+        u.unit_name,
+        j.rate,
+        j.tax_per,
+        j.jobwork_party_id,
+        j.unit_id
+    FROM dbo.tbl_jobwork_part_master j
+    INNER JOIN dbo.tbl_jobwork_party jp ON jp.jobwork_party_id = j.jobwork_party_id
+    LEFT JOIN dbo.tbl_unit u ON u.unit_id = j.unit_id AND u.status = 1
+    WHERE (@jw = 0 OR j.jobwork_party_id = @jw) AND j.status = 1
+    ORDER BY jp.party_name, j.part_name;
+END
+GO
+
+IF OBJECT_ID('dbo.dlt_jobwork_part_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_jobwork_part_sp;
+GO
+CREATE PROCEDURE dbo.dlt_jobwork_part_sp
+    @id NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @jid BIGINT = CAST(@id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+        UPDATE dbo.tbl_jobwork_part_master
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE jobwork_part_id = @jid AND status = 1;
+        SELECT 'True' AS Success, N'Deleted.' AS Message;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
 /* ==================== JOBWORK CHALLAN (send + multipart lines; challan_no auto JWC-{id}) ==================== */
 
 IF OBJECT_ID('dbo.dis_active_jobwork_challan_list_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_active_jobwork_challan_list_sp;
@@ -281,7 +422,6 @@ BEGIN
         h.jobwork_challan_id,
         h.challan_date,
         h.challan_no,
-        pm.party_name AS item_party_name,
         jp.party_name AS jobwork_party_name,
         ISNULL(x.item_list, N'') AS item_list,
         ISNULL(x.items_returned, N'') AS items_returned,
@@ -290,32 +430,31 @@ BEGIN
         ISNULL(x.total_qty_returned, 0) AS total_qty_returned,
         ISNULL(x.total_qty_pending, 0) AS total_qty_pending
     FROM dbo.tbl_jobwork_challan AS h
-    INNER JOIN dbo.tbl_party_master AS pm ON pm.party_id = h.party_id
     INNER JOIN dbo.tbl_jobwork_party AS jp ON jp.jobwork_party_id = h.jobwork_party_id AND jp.status = 1
     LEFT JOIN (
         SELECT
             d.jobwork_challan_id,
             STUFF((
-                SELECT N' | ' + CAST(pm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_sent AS VARCHAR(20))
+                SELECT N' | ' + CAST(jwm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_sent AS VARCHAR(20))
                 FROM dbo.tbl_jobwork_challan_detail AS d2
-                INNER JOIN dbo.tbl_part_master AS pm2 ON pm2.part_id = d2.part_id AND pm2.status = 1
+                INNER JOIN dbo.tbl_jobwork_part_master AS jwm2 ON jwm2.jobwork_part_id = d2.jobwork_part_id AND jwm2.status = 1
                 WHERE d2.jobwork_challan_id = d.jobwork_challan_id AND d2.status = 1
                 ORDER BY d2.jobwork_detail_id
                 FOR XML PATH(N''), TYPE
             ).value(N'.[1]', N'NVARCHAR(MAX)'), 1, 3, N'') AS item_list,
             STUFF((
-                SELECT N' | ' + CAST(pm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_perfect_done + d2.qty_reject_done AS VARCHAR(20))
+                SELECT N' | ' + CAST(jwm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_perfect_done + d2.qty_reject_done AS VARCHAR(20))
                 FROM dbo.tbl_jobwork_challan_detail AS d2
-                INNER JOIN dbo.tbl_part_master AS pm2 ON pm2.part_id = d2.part_id AND pm2.status = 1
+                INNER JOIN dbo.tbl_jobwork_part_master AS jwm2 ON jwm2.jobwork_part_id = d2.jobwork_part_id AND jwm2.status = 1
                 WHERE d2.jobwork_challan_id = d.jobwork_challan_id AND d2.status = 1
                 ORDER BY d2.jobwork_detail_id
                 FOR XML PATH(N''), TYPE
             ).value(N'.[1]', N'NVARCHAR(MAX)'), 1, 3, N'') AS items_returned,
             STUFF((
-                SELECT N' | ' + CAST(pm2.part_name AS NVARCHAR(200)) + N' × '
+                SELECT N' | ' + CAST(jwm2.part_name AS NVARCHAR(200)) + N' × '
                     + CAST(d2.qty_sent - d2.qty_perfect_done - d2.qty_reject_done AS VARCHAR(20))
                 FROM dbo.tbl_jobwork_challan_detail AS d2
-                INNER JOIN dbo.tbl_part_master AS pm2 ON pm2.part_id = d2.part_id AND pm2.status = 1
+                INNER JOIN dbo.tbl_jobwork_part_master AS jwm2 ON jwm2.jobwork_part_id = d2.jobwork_part_id AND jwm2.status = 1
                 WHERE d2.jobwork_challan_id = d.jobwork_challan_id AND d2.status = 1
                 ORDER BY d2.jobwork_detail_id
                 FOR XML PATH(N''), TYPE
@@ -324,7 +463,7 @@ BEGIN
             SUM(d.qty_perfect_done + d.qty_reject_done) AS total_qty_returned,
             SUM(d.qty_sent - d.qty_perfect_done - d.qty_reject_done) AS total_qty_pending
         FROM dbo.tbl_jobwork_challan_detail AS d
-        INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+        INNER JOIN dbo.tbl_jobwork_part_master AS jwm ON jwm.jobwork_part_id = d.jobwork_part_id AND jwm.status = 1
         WHERE d.status = 1
         GROUP BY d.jobwork_challan_id
     ) AS x ON x.jobwork_challan_id = h.jobwork_challan_id
@@ -343,21 +482,24 @@ BEGIN
     SET NOCOUNT ON;
     DECLARE @id BIGINT = CAST(@jobwork_challan_id AS BIGINT);
 
-    SELECT h.jobwork_challan_id, h.party_id, h.jobwork_party_id, h.challan_no, h.challan_date, h.remarks
+    SELECT h.jobwork_challan_id, h.jobwork_party_id, h.challan_no, h.challan_date, h.remarks
     FROM dbo.tbl_jobwork_challan AS h
     WHERE h.jobwork_challan_id = @id AND h.status = 1;
 
     SELECT
         d.jobwork_detail_id,
-        d.part_id,
-        pm.part_name,
+        d.jobwork_part_id,
+        jwm.part_name,
+        u.unit_name,
         d.qty_sent,
         d.qty_perfect_done,
         d.qty_reject_done,
         d.qty_sent - d.qty_perfect_done - d.qty_reject_done AS qty_pending,
-        d.rate_at_time
+        d.rate_at_time,
+        jwm.tax_per
     FROM dbo.tbl_jobwork_challan_detail AS d
-    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id
+    INNER JOIN dbo.tbl_jobwork_part_master AS jwm ON jwm.jobwork_part_id = d.jobwork_part_id
+    LEFT JOIN dbo.tbl_unit AS u ON u.unit_id = jwm.unit_id AND u.status = 1
     WHERE d.jobwork_challan_id = @id AND d.status = 1
     ORDER BY d.jobwork_detail_id;
 END
@@ -374,14 +516,14 @@ BEGIN
 
     SELECT
         d.jobwork_detail_id,
-        d.part_id,
-        pm.part_name,
+        d.jobwork_part_id,
+        jwm.part_name,
         d.qty_sent,
         d.qty_perfect_done,
         d.qty_reject_done,
         d.qty_sent - d.qty_perfect_done - d.qty_reject_done AS qty_pending
     FROM dbo.tbl_jobwork_challan_detail AS d
-    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id
+    INNER JOIN dbo.tbl_jobwork_part_master AS jwm ON jwm.jobwork_part_id = d.jobwork_part_id
     WHERE d.jobwork_challan_id = @id AND d.status = 1
       AND d.qty_sent > d.qty_perfect_done + d.qty_reject_done
     ORDER BY d.jobwork_detail_id;
@@ -391,7 +533,6 @@ GO
 IF OBJECT_ID('dbo.ins_jobwork_challan_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_jobwork_challan_sp;
 GO
 CREATE PROCEDURE dbo.ins_jobwork_challan_sp
-    @party_id NVARCHAR(50),
     @jobwork_party_id NVARCHAR(50),
     @challan_date NVARCHAR(50),
     @remarks NVARCHAR(MAX),
@@ -403,19 +544,12 @@ AS
 BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
-        DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
         DECLARE @jwp BIGINT = CAST(@jobwork_party_id AS BIGINT);
         DECLARE @uid INT = CAST(@by AS INT);
         DECLARE @d DATE = CAST(@challan_date AS DATE);
         DECLARE @tmpNo NVARCHAR(50) = N'~' + REPLACE(CONVERT(NVARCHAR(36), NEWID()), N'-', N'');
         DECLARE @hid BIGINT;
         DECLARE @finalNo NVARCHAR(50);
-
-        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_party_master WHERE party_id = @pid AND status = 1)
-        BEGIN
-            SELECT 'False' AS Success, N'Party (items) not found or inactive.' AS Message;
-            RETURN;
-        END
 
         IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_party WHERE jobwork_party_id = @jwp AND status = 1)
         BEGIN
@@ -425,8 +559,8 @@ BEGIN
 
         BEGIN TRANSACTION;
 
-        INSERT INTO dbo.tbl_jobwork_challan (party_id, jobwork_party_id, challan_no, challan_date, remarks, status, create_by, create_date)
-        VALUES (@pid, @jwp, @tmpNo, @d, @remarks, 1, @uid, dbo.get_date());
+        INSERT INTO dbo.tbl_jobwork_challan (jobwork_party_id, challan_no, challan_date, remarks, status, create_by, create_date)
+        VALUES (@jwp, @tmpNo, @d, @remarks, 1, @uid, dbo.get_date());
 
         SET @hid = SCOPE_IDENTITY();
         SET @finalNo = N'JWC-' + CAST(@hid AS VARCHAR(20));
@@ -439,7 +573,7 @@ BEGIN
         DECLARE @q NVARCHAR(MAX) = @qtys;
         DECLARE @r NVARCHAR(MAX) = ISNULL(@rates, N'');
         DECLARE @segP NVARCHAR(50), @segQ NVARCHAR(50), @segR NVARCHAR(50);
-        DECLARE @partId BIGINT, @qty INT, @rate DECIMAL(18, 2);
+        DECLARE @jwPartId BIGINT, @qty INT, @rate DECIMAL(18, 2);
 
         WHILE LEN(@p) > 0 AND CHARINDEX(N',', @p) > 0
         BEGIN
@@ -454,25 +588,25 @@ BEGIN
 
             IF LTRIM(RTRIM(@segP)) = N'' BREAK;
 
-            SET @partId = CAST(@segP AS BIGINT);
+            SET @jwPartId = CAST(@segP AS BIGINT);
             SET @qty = CAST(@segQ AS INT);
             SET @rate = CAST(@segR AS DECIMAL(18, 2));
 
             IF @qty <= 0 CONTINUE;
 
             IF NOT EXISTS (
-                SELECT 1 FROM dbo.tbl_part_master
-                WHERE part_id = @partId AND CAST(party_id AS BIGINT) = @pid AND status = 1)
+                SELECT 1 FROM dbo.tbl_jobwork_part_master
+                WHERE jobwork_part_id = @jwPartId AND jobwork_party_id = @jwp AND status = 1)
             BEGIN
                 ROLLBACK TRANSACTION;
-                SELECT 'False' AS Success, N'Part does not belong to party (items) or inactive.' AS Message;
+                SELECT 'False' AS Success, N'Part does not belong to this jobwork party or inactive.' AS Message;
                 RETURN;
             END
 
             INSERT INTO dbo.tbl_jobwork_challan_detail (
-                jobwork_challan_id, part_id, qty_sent, qty_perfect_done, qty_reject_done, rate_at_time,
+                jobwork_challan_id, jobwork_part_id, qty_sent, qty_perfect_done, qty_reject_done, rate_at_time,
                 status, create_by, create_date)
-            VALUES (@hid, @partId, @qty, 0, 0, @rate, 1, @uid, dbo.get_date());
+            VALUES (@hid, @jwPartId, @qty, 0, 0, @rate, 1, @uid, dbo.get_date());
         END
 
         IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_challan_detail WHERE jobwork_challan_id = @hid AND status = 1)
@@ -496,7 +630,6 @@ IF OBJECT_ID('dbo.upd_jobwork_challan_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.u
 GO
 CREATE PROCEDURE dbo.upd_jobwork_challan_sp
     @jobwork_challan_id NVARCHAR(50),
-    @party_id NVARCHAR(50),
     @jobwork_party_id NVARCHAR(50),
     @challan_date NVARCHAR(50),
     @remarks NVARCHAR(MAX),
@@ -509,23 +642,16 @@ BEGIN
     SET NOCOUNT ON;
     BEGIN TRY
         DECLARE @id BIGINT = CAST(@jobwork_challan_id AS BIGINT);
-        DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
         DECLARE @jwp BIGINT = CAST(@jobwork_party_id AS BIGINT);
         DECLARE @uid INT = CAST(@by AS INT);
         DECLARE @d DATE = CAST(@challan_date AS DATE);
         DECLARE @p NVARCHAR(MAX), @q NVARCHAR(MAX), @r NVARCHAR(MAX);
         DECLARE @segP NVARCHAR(50), @segQ NVARCHAR(50), @segR NVARCHAR(50);
-        DECLARE @partId BIGINT, @qty INT, @rate DECIMAL(18, 2);
+        DECLARE @jwPartId BIGINT, @qty INT, @rate DECIMAL(18, 2);
 
         IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_challan WHERE jobwork_challan_id = @id AND status = 1)
         BEGIN
             SELECT 'False' AS Success, N'Jobwork challan not found.' AS Message;
-            RETURN;
-        END
-
-        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_party_master WHERE party_id = @pid AND status = 1)
-        BEGIN
-            SELECT 'False' AS Success, N'Party (items) not found or inactive.' AS Message;
             RETURN;
         END
 
@@ -552,7 +678,7 @@ BEGIN
         BEGIN TRANSACTION;
 
         UPDATE dbo.tbl_jobwork_challan
-        SET party_id = @pid, jobwork_party_id = @jwp, challan_date = @d, remarks = @remarks, modify_by = @uid, modify_date = dbo.get_date()
+        SET jobwork_party_id = @jwp, challan_date = @d, remarks = @remarks, modify_by = @uid, modify_date = dbo.get_date()
         WHERE jobwork_challan_id = @id;
 
         DELETE FROM dbo.tbl_jobwork_challan_detail WHERE jobwork_challan_id = @id;
@@ -574,25 +700,25 @@ BEGIN
 
             IF LTRIM(RTRIM(@segP)) = N'' BREAK;
 
-            SET @partId = CAST(@segP AS BIGINT);
+            SET @jwPartId = CAST(@segP AS BIGINT);
             SET @qty = CAST(@segQ AS INT);
             SET @rate = CAST(@segR AS DECIMAL(18, 2));
 
             IF @qty <= 0 CONTINUE;
 
             IF NOT EXISTS (
-                SELECT 1 FROM dbo.tbl_part_master
-                WHERE part_id = @partId AND CAST(party_id AS BIGINT) = @pid AND status = 1)
+                SELECT 1 FROM dbo.tbl_jobwork_part_master
+                WHERE jobwork_part_id = @jwPartId AND jobwork_party_id = @jwp AND status = 1)
             BEGIN
                 ROLLBACK TRANSACTION;
-                SELECT 'False' AS Success, N'Part does not belong to party (items) or inactive.' AS Message;
+                SELECT 'False' AS Success, N'Part does not belong to this jobwork party or inactive.' AS Message;
                 RETURN;
             END
 
             INSERT INTO dbo.tbl_jobwork_challan_detail (
-                jobwork_challan_id, part_id, qty_sent, qty_perfect_done, qty_reject_done, rate_at_time,
+                jobwork_challan_id, jobwork_part_id, qty_sent, qty_perfect_done, qty_reject_done, rate_at_time,
                 status, create_by, create_date)
-            VALUES (@id, @partId, @qty, 0, 0, @rate, 1, @uid, dbo.get_date());
+            VALUES (@id, @jwPartId, @qty, 0, 0, @rate, 1, @uid, dbo.get_date());
         END
 
         IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_challan_detail WHERE jobwork_challan_id = @id AND status = 1)
@@ -804,13 +930,13 @@ BEGIN
         rh.jobwork_return_id,
         rh.return_date,
         rh.slip_no,
-        pm.part_name,
+        jwm.part_name,
         rh.qty_perfect,
         rh.qty_reject,
         rh.remarks
     FROM dbo.tbl_jobwork_return_history AS rh
     INNER JOIN dbo.tbl_jobwork_challan_detail AS d ON d.jobwork_detail_id = rh.jobwork_detail_id
-    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id
+    INNER JOIN dbo.tbl_jobwork_part_master AS jwm ON jwm.jobwork_part_id = d.jobwork_part_id
     WHERE d.jobwork_challan_id = @id AND rh.status = 1
     ORDER BY rh.return_date DESC, rh.jobwork_return_id DESC;
 END
@@ -821,21 +947,20 @@ GO
 CREATE PROCEDURE dbo.dis_jobwork_challan_report_sp
     @from_date NVARCHAR(50),
     @to_date NVARCHAR(50),
-    @party_id NVARCHAR(50) = N'0',
+    @jobwork_party_id NVARCHAR(50) = N'0',
     @include_deleted INT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @f DATE = CAST(@from_date AS DATE);
     DECLARE @t DATE = CAST(@to_date AS DATE);
-    DECLARE @pid BIGINT = CAST(@party_id AS BIGINT);
+    DECLARE @jw BIGINT = CAST(@jobwork_party_id AS BIGINT);
 
     SELECT
         ROW_NUMBER() OVER (ORDER BY h.challan_date DESC, h.jobwork_challan_id DESC) AS sr,
         h.jobwork_challan_id,
         h.challan_date,
         h.challan_no,
-        pm.party_name AS item_party_name,
         jp.party_name AS jobwork_party_name,
         CASE
             WHEN h.status <> 1 THEN N'Closed'
@@ -849,32 +974,31 @@ BEGIN
         ISNULL(x.total_qty_returned, 0) AS total_qty_returned,
         ISNULL(x.total_qty_pending, 0) AS total_qty_pending
     FROM dbo.tbl_jobwork_challan AS h
-    INNER JOIN dbo.tbl_party_master AS pm ON pm.party_id = h.party_id
     INNER JOIN dbo.tbl_jobwork_party AS jp ON jp.jobwork_party_id = h.jobwork_party_id AND jp.status = 1
     LEFT JOIN (
         SELECT
             d.jobwork_challan_id,
             STUFF((
-                SELECT N' | ' + CAST(pm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_sent AS VARCHAR(20))
+                SELECT N' | ' + CAST(jwm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_sent AS VARCHAR(20))
                 FROM dbo.tbl_jobwork_challan_detail AS d2
-                INNER JOIN dbo.tbl_part_master AS pm2 ON pm2.part_id = d2.part_id AND pm2.status = 1
+                INNER JOIN dbo.tbl_jobwork_part_master AS jwm2 ON jwm2.jobwork_part_id = d2.jobwork_part_id AND jwm2.status = 1
                 WHERE d2.jobwork_challan_id = d.jobwork_challan_id AND (@include_deleted = 1 OR d2.status = 1)
                 ORDER BY d2.jobwork_detail_id
                 FOR XML PATH(N''), TYPE
             ).value(N'.[1]', N'NVARCHAR(MAX)'), 1, 3, N'') AS item_list,
             STUFF((
-                SELECT N' | ' + CAST(pm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_perfect_done + d2.qty_reject_done AS VARCHAR(20))
+                SELECT N' | ' + CAST(jwm2.part_name AS NVARCHAR(200)) + N' × ' + CAST(d2.qty_perfect_done + d2.qty_reject_done AS VARCHAR(20))
                 FROM dbo.tbl_jobwork_challan_detail AS d2
-                INNER JOIN dbo.tbl_part_master AS pm2 ON pm2.part_id = d2.part_id AND pm2.status = 1
+                INNER JOIN dbo.tbl_jobwork_part_master AS jwm2 ON jwm2.jobwork_part_id = d2.jobwork_part_id AND jwm2.status = 1
                 WHERE d2.jobwork_challan_id = d.jobwork_challan_id AND (@include_deleted = 1 OR d2.status = 1)
                 ORDER BY d2.jobwork_detail_id
                 FOR XML PATH(N''), TYPE
             ).value(N'.[1]', N'NVARCHAR(MAX)'), 1, 3, N'') AS items_returned,
             STUFF((
-                SELECT N' | ' + CAST(pm2.part_name AS NVARCHAR(200)) + N' × '
+                SELECT N' | ' + CAST(jwm2.part_name AS NVARCHAR(200)) + N' × '
                     + CAST(d2.qty_sent - d2.qty_perfect_done - d2.qty_reject_done AS VARCHAR(20))
                 FROM dbo.tbl_jobwork_challan_detail AS d2
-                INNER JOIN dbo.tbl_part_master AS pm2 ON pm2.part_id = d2.part_id AND pm2.status = 1
+                INNER JOIN dbo.tbl_jobwork_part_master AS jwm2 ON jwm2.jobwork_part_id = d2.jobwork_part_id AND jwm2.status = 1
                 WHERE d2.jobwork_challan_id = d.jobwork_challan_id AND (@include_deleted = 1 OR d2.status = 1)
                 ORDER BY d2.jobwork_detail_id
                 FOR XML PATH(N''), TYPE
@@ -883,12 +1007,12 @@ BEGIN
             SUM(d.qty_perfect_done + d.qty_reject_done) AS total_qty_returned,
             SUM(d.qty_sent - d.qty_perfect_done - d.qty_reject_done) AS total_qty_pending
         FROM dbo.tbl_jobwork_challan_detail AS d
-        INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+        INNER JOIN dbo.tbl_jobwork_part_master AS jwm ON jwm.jobwork_part_id = d.jobwork_part_id AND jwm.status = 1
         WHERE (@include_deleted = 1 OR d.status = 1)
         GROUP BY d.jobwork_challan_id
     ) AS x ON x.jobwork_challan_id = h.jobwork_challan_id
     WHERE CAST(h.challan_date AS DATE) BETWEEN @f AND @t
-      AND (@pid = 0 OR h.party_id = @pid)
+      AND (@jw = 0 OR h.jobwork_party_id = @jw)
       AND (@include_deleted = 1 OR h.status = 1)
     ORDER BY h.challan_date DESC, h.jobwork_challan_id DESC;
 END
@@ -899,13 +1023,13 @@ GO
 CREATE PROCEDURE dbo.dis_jobwork_receive_history_sp
     @from_date NVARCHAR(50),
     @to_date NVARCHAR(50),
-    @party_id NVARCHAR(50) = N'0'
+    @jobwork_party_id NVARCHAR(50) = N'0'
 AS
 BEGIN
     SET NOCOUNT ON;
     DECLARE @f DATE = CAST(@from_date AS DATE);
     DECLARE @t DATE = CAST(@to_date AS DATE);
-    DECLARE @pid BIGINT = CAST(ISNULL(NULLIF(LTRIM(RTRIM(@party_id)), N''), N'0') AS BIGINT);
+    DECLARE @jw BIGINT = CAST(ISNULL(NULLIF(LTRIM(RTRIM(@jobwork_party_id)), N''), N'0') AS BIGINT);
 
     SELECT
         rh.jobwork_return_id,
@@ -913,26 +1037,22 @@ BEGIN
         ISNULL(NULLIF(LTRIM(RTRIM(rh.slip_no)), N''), N'—') AS slip_no,
         h.challan_no,
         h.challan_date,
-        p.party_name AS item_party_name,
         jp.party_name AS jobwork_party_name,
-        pm.part_name,
+        jwm.part_name,
         rh.qty_perfect,
         rh.qty_reject,
         rh.remarks
     FROM dbo.tbl_jobwork_return_history AS rh
     INNER JOIN dbo.tbl_jobwork_challan_detail AS d ON d.jobwork_detail_id = rh.jobwork_detail_id AND d.status = 1
     INNER JOIN dbo.tbl_jobwork_challan AS h ON h.jobwork_challan_id = d.jobwork_challan_id AND h.status = 1
-    INNER JOIN dbo.tbl_party_master AS p ON p.party_id = h.party_id AND p.status = 1
     INNER JOIN dbo.tbl_jobwork_party AS jp ON jp.jobwork_party_id = h.jobwork_party_id AND jp.status = 1
-    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+    INNER JOIN dbo.tbl_jobwork_part_master AS jwm ON jwm.jobwork_part_id = d.jobwork_part_id AND jwm.status = 1
     WHERE rh.status = 1
       AND CAST(rh.return_date AS DATE) BETWEEN @f AND @t
-      AND (@pid = 0 OR p.party_id = @pid)
+      AND (@jw = 0 OR h.jobwork_party_id = @jw)
     ORDER BY rh.return_date DESC, rh.jobwork_return_id DESC;
 END
 GO
-
-/* ==================== UNIT ==================== */
 
 IF OBJECT_ID('dbo.sel_unit_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_unit_sp;
 GO
@@ -1334,6 +1454,7 @@ BEGIN
         (SELECT COUNT(1) FROM dbo.tbl_party_master WHERE status = 1) AS total_party,
         (SELECT COUNT(1) FROM dbo.tbl_part_master WHERE status = 1) AS total_part,
         (SELECT COUNT(1) FROM dbo.tbl_jobwork_party WHERE status = 1) AS total_jobwork_party,
+        (SELECT COUNT(1) FROM dbo.tbl_jobwork_part_master WHERE status = 1) AS total_jobwork_part,
 
         /* Inward — active (stock still to dispatch) */
         (SELECT COUNT(DISTINCT h.inward_id)
@@ -2649,6 +2770,191 @@ BEGIN
         UPDATE dbo.tbl_invoice
         SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
         WHERE invoice_id = @invid;
+
+        SELECT 'True' AS Success, N'Deleted.' AS Message;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+/* ==================== EXPENSE TRACKER ==================== */
+
+IF OBJECT_ID('dbo.dis_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_expense_sp;
+GO
+CREATE PROCEDURE dbo.dis_expense_sp
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY e.expense_date DESC, e.expense_id DESC) AS sr,
+        e.expense_id,
+        e.expense_date,
+        e.user_id,
+        ISNULL(um.full_name, N'—') AS user_name,
+        e.amount,
+        e.payment_mode,
+        e.note
+    FROM dbo.tbl_expense AS e
+    LEFT JOIN dbo.tbl_user_master AS um ON um.user_id = e.user_id AND um.status = 1
+    WHERE e.status = 1
+      AND e.expense_date BETWEEN @f AND @t
+    ORDER BY e.expense_date DESC, e.expense_id DESC;
+END
+GO
+
+IF OBJECT_ID('dbo.ins_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_expense_sp;
+GO
+CREATE PROCEDURE dbo.ins_expense_sp
+    @user_id NVARCHAR(50),
+    @expense_date NVARCHAR(50),
+    @amount NVARCHAR(50),
+    @note NVARCHAR(500),
+    @payment_mode NVARCHAR(20),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+        DECLARE @d DATE = CAST(@expense_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@amount AS DECIMAL(18, 2));
+        DECLARE @pm NVARCHAR(20) = UPPER(LTRIM(RTRIM(ISNULL(@payment_mode, N''))));
+        DECLARE @byUid INT = CAST(@by AS INT);
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_user_master WHERE user_id = @uid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'User not found or inactive.' AS Message;
+            RETURN;
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        IF @pm NOT IN (N'CASH', N'ONLINE')
+        BEGIN
+            SELECT 'False' AS Success, N'Payment mode must be Cash or Online.' AS Message;
+            RETURN;
+        END
+
+        DECLARE @pmOut NVARCHAR(20) = CASE WHEN @pm = N'CASH' THEN N'Cash' ELSE N'Online' END;
+
+        INSERT INTO dbo.tbl_expense (user_id, expense_date, amount, note, payment_mode, status, create_by, create_date)
+        VALUES (@uid, @d, @amt, NULLIF(LTRIM(RTRIM(@note)), N''), @pmOut, 1, @byUid, dbo.get_date());
+
+        SELECT 'True' AS Success, N'Saved.' AS Message, CAST(SCOPE_IDENTITY() AS BIGINT) AS expense_id;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.sel_expense_by_id_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_expense_by_id_sp;
+GO
+CREATE PROCEDURE dbo.sel_expense_by_id_sp
+    @expense_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @eid BIGINT = CAST(@expense_id AS BIGINT);
+    SELECT expense_id, user_id, expense_date, amount, note, payment_mode
+    FROM dbo.tbl_expense
+    WHERE expense_id = @eid AND status = 1;
+END
+GO
+
+IF OBJECT_ID('dbo.upd_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.upd_expense_sp;
+GO
+CREATE PROCEDURE dbo.upd_expense_sp
+    @expense_id NVARCHAR(50),
+    @user_id NVARCHAR(50),
+    @expense_date NVARCHAR(50),
+    @amount NVARCHAR(50),
+    @note NVARCHAR(500),
+    @payment_mode NVARCHAR(20),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @eid BIGINT = CAST(@expense_id AS BIGINT);
+        DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+        DECLARE @d DATE = CAST(@expense_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@amount AS DECIMAL(18, 2));
+        DECLARE @pm NVARCHAR(20) = UPPER(LTRIM(RTRIM(ISNULL(@payment_mode, N''))));
+        DECLARE @byUid INT = CAST(@by AS INT);
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_expense WHERE expense_id = @eid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Expense not found.' AS Message;
+            RETURN;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_user_master WHERE user_id = @uid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'User not found or inactive.' AS Message;
+            RETURN;
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        IF @pm NOT IN (N'CASH', N'ONLINE')
+        BEGIN
+            SELECT 'False' AS Success, N'Payment mode must be Cash or Online.' AS Message;
+            RETURN;
+        END
+
+        DECLARE @pmOut NVARCHAR(20) = CASE WHEN @pm = N'CASH' THEN N'Cash' ELSE N'Online' END;
+
+        UPDATE dbo.tbl_expense
+        SET user_id = @uid, expense_date = @d, amount = @amt,
+            note = NULLIF(LTRIM(RTRIM(@note)), N''), payment_mode = @pmOut,
+            modify_by = @byUid, modify_date = dbo.get_date()
+        WHERE expense_id = @eid AND status = 1;
+
+        SELECT 'True' AS Success, N'Updated.' AS Message;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.dlt_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_expense_sp;
+GO
+CREATE PROCEDURE dbo.dlt_expense_sp
+    @expense_id NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @eid BIGINT = CAST(@expense_id AS BIGINT);
+        DECLARE @byUid INT = CAST(@by AS INT);
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_expense WHERE expense_id = @eid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Expense not found.' AS Message;
+            RETURN;
+        END
+
+        UPDATE dbo.tbl_expense
+        SET status = 0, delete_by = @byUid, delete_date = dbo.get_date()
+        WHERE expense_id = @eid;
 
         SELECT 'True' AS Success, N'Deleted.' AS Message;
     END TRY

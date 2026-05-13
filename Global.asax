@@ -22,16 +22,13 @@
 
     void Session_Start(object sender, EventArgs e) 
     {
-        Session["user_id"] = "0";
-        Session["name"] = "";
-        Session["photo"] = "";
+        // Do not set Session["user_id"] here. A value of "0" made every new session look "logged out"
+        // and the default 20-minute timeout forced re-login often. user_id is set only in Default.aspx after login.
     }
 
     void Session_End(object sender, EventArgs e) 
     {
-        Session["user_id"] = "0";
-        Session["name"] = "";
-        Session["photo"] = "";
+        // Cannot read or write Session here — it is already unloaded. (Previous code that set Session keys was invalid.)
     }
        
 </script>

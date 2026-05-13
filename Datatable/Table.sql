@@ -1,6 +1,6 @@
 ﻿/*
-  Tables: Party → Jobwork party → Jobwork challan (header + lines + return history) → Unit → Part → User
-          → Inward (header + lines + outward history) → Invoice
+  Tables: Party → Jobwork party → Jobwork part (separate from Part master) → Jobwork challan (header + lines + return history)
+          → Unit → Part → User → Inward (header + lines + outward history) → Invoice
   Run order: Function.sql → Table.sql → StoreProcedure.sql
 */
 
@@ -164,13 +164,16 @@ GO
 
 /* --------------------- Jobwork (party, send challan, line qty, return history) — tables only, no indexes --------------------- */
 /*
-  Recreate jobwork tables (dev / empty DB): drop in child → parent order. Dropping dbo.tbl_jobwork_challan
-  first fails with Msg 3726 while dbo.tbl_jobwork_challan_detail exists.
+  To recreate jobwork tables on an existing database, drop in this order only (child → parent).
+  Dropping dbo.tbl_jobwork_challan before dbo.tbl_jobwork_challan_detail causes Msg 3726 (FK).
 
-  DROP TABLE dbo.tbl_jobwork_return_history;
-  DROP TABLE dbo.tbl_jobwork_challan_detail;
-  DROP TABLE dbo.tbl_jobwork_challan;
-  DROP TABLE dbo.tbl_jobwork_party;
+  1) tbl_jobwork_return_history
+  2) tbl_jobwork_challan_detail
+  3) tbl_jobwork_challan
+  4) tbl_jobwork_part_master
+  5) tbl_jobwork_party
+
+  After schema changes to jobwork tables, redeploy jobwork blocks from StoreProcedure.sql (same folder).
 */
 
 CREATE TABLE dbo.tbl_jobwork_party (
@@ -190,11 +193,28 @@ CREATE TABLE dbo.tbl_jobwork_party (
 );
 GO
 
+/* Jobwork-only item master (not wired to jobwork challan lines until you switch that flow). */
+
+CREATE TABLE dbo.tbl_jobwork_part_master (
+    jobwork_part_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+    jobwork_party_id BIGINT NOT NULL,
+    part_name NVARCHAR(250) NOT NULL,
+    unit_id BIGINT NULL,
+    rate DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    tax_per DECIMAL(18, 2) NOT NULL DEFAULT 0.00,
+    status BIT NOT NULL DEFAULT 1,
+    create_by INT NULL,
+    create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+    modify_by INT NULL,
+    modify_date DATETIME NULL,
+    delete_by INT NULL,
+    delete_date DATETIME NULL
+);
+GO
+
 CREATE TABLE dbo.tbl_jobwork_challan (
     jobwork_challan_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
     jobwork_party_id BIGINT NOT NULL,
-    /* Regular party: parts on this challan belong to this party (tbl_party_master). */
-    party_id BIGINT NOT NULL,
     challan_no NVARCHAR(50) NOT NULL,
     challan_date DATETIME NOT NULL,
     remarks NVARCHAR(MAX) NULL,
@@ -204,17 +224,14 @@ CREATE TABLE dbo.tbl_jobwork_challan (
     modify_by INT NULL,
     modify_date DATETIME NULL,
     delete_by INT NULL,
-    delete_date DATETIME NULL,
-    CONSTRAINT FK_jobwork_challan_party FOREIGN KEY (jobwork_party_id) REFERENCES dbo.tbl_jobwork_party (jobwork_party_id),
-    CONSTRAINT FK_jobwork_challan_item_party FOREIGN KEY (party_id) REFERENCES dbo.tbl_party_master (party_id)
+    delete_date DATETIME NULL
 );
 GO
-/* If tbl_jobwork_challan already exists without party_id, run (after backfill): add column, FK, redeploy ins/upd SPs. */
 
 CREATE TABLE dbo.tbl_jobwork_challan_detail (
     jobwork_detail_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
     jobwork_challan_id BIGINT NOT NULL,
-    part_id BIGINT NOT NULL,
+    jobwork_part_id BIGINT NOT NULL,
     qty_sent INT NOT NULL,
     qty_perfect_done INT NOT NULL DEFAULT 0,
     qty_reject_done INT NOT NULL DEFAULT 0,
@@ -226,8 +243,6 @@ CREATE TABLE dbo.tbl_jobwork_challan_detail (
     modify_date DATETIME NULL,
     delete_by INT NULL,
     delete_date DATETIME NULL,
-    CONSTRAINT FK_jobwork_detail_header FOREIGN KEY (jobwork_challan_id) REFERENCES dbo.tbl_jobwork_challan (jobwork_challan_id),
-    CONSTRAINT FK_jobwork_detail_part FOREIGN KEY (part_id) REFERENCES dbo.tbl_part_master (part_id),
     CONSTRAINT CK_jobwork_detail_qty CHECK (
         qty_sent > 0
         AND qty_perfect_done >= 0
@@ -236,6 +251,7 @@ CREATE TABLE dbo.tbl_jobwork_challan_detail (
     )
 );
 GO
+
 
 CREATE TABLE dbo.tbl_jobwork_return_history (
     jobwork_return_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
@@ -252,7 +268,6 @@ CREATE TABLE dbo.tbl_jobwork_return_history (
     modify_date DATETIME NULL,
     delete_by INT NULL,
     delete_date DATETIME NULL,
-    CONSTRAINT FK_jobwork_return_detail FOREIGN KEY (jobwork_detail_id) REFERENCES dbo.tbl_jobwork_challan_detail (jobwork_detail_id),
     CONSTRAINT CK_jobwork_return_qty CHECK (
         qty_perfect >= 0
         AND qty_reject >= 0
@@ -354,3 +369,24 @@ GO
 -- CREATE UNIQUE INDEX UX_inward_challan_party_challan_active
 --     ON dbo.tbl_inward_challan (party_id, challan_no)
 --     WHERE status = 1 AND LEN(LTRIM(RTRIM(challan_no))) > 0;
+
+/* Expense tracker (standalone). No FK/CHECK — table only for now. */
+IF OBJECT_ID('dbo.tbl_expense', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tbl_expense (
+        expense_id BIGINT IDENTITY(1, 1) NOT NULL,
+        user_id BIGINT NOT NULL,
+        expense_date DATE NOT NULL,
+        amount DECIMAL(18, 2) NOT NULL,
+        note NVARCHAR(500) NULL,
+        payment_mode NVARCHAR(20) NOT NULL,
+        status BIT NOT NULL DEFAULT 1,
+        create_by INT NULL,
+        create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+        modify_by INT NULL,
+        modify_date DATETIME NULL,
+        delete_by INT NULL,
+        delete_date DATETIME NULL
+    );
+END
+GO

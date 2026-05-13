@@ -20,26 +20,26 @@ public partial class Jobwork_Challan_Report : Page
                 txt_from.Text = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).ToString("yyyy-MM-dd");
                 txt_to.Text = DateTime.Today.ToString("yyyy-MM-dd");
             }
-            BindParty();
+            BindJobworkParty();
             BindGrid();
         }
     }
 
-    private void BindParty()
+    private void BindJobworkParty()
     {
-        ddl_party.Items.Clear();
-        ddl_party.Items.Add(new ListItem("All parties", "0"));
-        DataSet ds = BAL_Party.dis_party();
+        ddl_jobwork_party.Items.Clear();
+        ddl_jobwork_party.Items.Add(new ListItem("All jobwork parties", "0"));
+        DataSet ds = BAL_JobworkParty.dis_jobwork_party();
         if (ds.Tables.Count > 0)
         {
             foreach (DataRow r in ds.Tables[0].Rows)
-                ddl_party.Items.Add(new ListItem(r["party_name"].ToString(), r["party_id"].ToString()));
+                ddl_jobwork_party.Items.Add(new ListItem(r["party_name"].ToString(), r["jobwork_party_id"].ToString()));
         }
     }
 
     private void BindGrid()
     {
-        DataSet ds = BAL_JobworkChallan.dis_jobwork_challan_report(txt_from.Text, txt_to.Text, ddl_party.SelectedValue, "0");
+        DataSet ds = BAL_JobworkChallan.dis_jobwork_challan_report(txt_from.Text, txt_to.Text, ddl_jobwork_party.SelectedValue, "0");
         grid_rpt.DataSource = ds.Tables.Count > 0 ? ds.Tables[0] : null;
         grid_rpt.DataBind();
     }

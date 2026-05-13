@@ -169,28 +169,57 @@ public partial class Jobwork_Challan_Print : Page
         var sb = new StringBuilder();
         sb.Append("<table class=\"jw-line-table\"><thead><tr>");
         sb.Append("<th class=\"jw-th-sr\">Sr</th>");
-        sb.Append("<th>Item</th>");
-        sb.Append("<th class=\"jw-th-qty\">Qty (sent)</th>");
+        sb.Append("<th class=\"jw-th-item\">Item</th>");
+        sb.Append("<th class=\"jw-th-qty\">Qty</th>");
+        sb.Append("<th class=\"jw-th-num\">Rate (&#8377;)</th>");
+        sb.Append("<th class=\"jw-th-num\">Total (&#8377;)</th>");
         sb.Append("</tr></thead><tbody>");
 
         int sr = 0;
         int totalQty = 0;
+        decimal sumAmount = 0m;
+
         foreach (DataRow r in lines.Rows)
         {
             sr++;
             string part = r["part_name"] != DBNull.Value ? r["part_name"].ToString() : "";
+            string unit = "";
+            if (lines.Columns.Contains("unit_name") && r["unit_name"] != DBNull.Value && r["unit_name"] != null)
+                unit = r["unit_name"].ToString().Trim();
+
             int qty = r["qty_sent"] != DBNull.Value ? Convert.ToInt32(r["qty_sent"], CultureInfo.InvariantCulture) : 0;
             totalQty += qty;
+
+            decimal rate = 0m;
+            if (r["rate_at_time"] != DBNull.Value && r["rate_at_time"] != null)
+                decimal.TryParse(r["rate_at_time"].ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out rate);
+
+            decimal lineTot = Math.Round(Convert.ToDecimal(qty, CultureInfo.InvariantCulture) * rate, 2, MidpointRounding.AwayFromZero);
+            sumAmount += lineTot;
+
+            string qtyCell;
+            if (!string.IsNullOrEmpty(unit))
+                qtyCell = qty.ToString(PrintCulture) + "\u00a0" + unit.Trim();
+            else
+                qtyCell = qty.ToString(PrintCulture);
 
             sb.Append("<tr>");
             sb.Append("<td class=\"jw-td-sr\">").Append(sr).Append("</td>");
             sb.Append("<td class=\"jw-item\">").Append(HttpUtility.HtmlEncode(part)).Append("</td>");
-            sb.Append("<td class=\"jw-td-qty\">").Append(qty.ToString(PrintCulture)).Append("</td>");
+            sb.Append("<td class=\"jw-td-qty jw-td-qty--unit\">").Append(HttpUtility.HtmlEncode(qtyCell)).Append("</td>");
+            sb.Append("<td class=\"jw-td-num\">").Append(rate.ToString("N2", PrintCulture)).Append("</td>");
+            sb.Append("<td class=\"jw-td-num\">").Append(lineTot.ToString("N2", PrintCulture)).Append("</td>");
             sb.Append("</tr>");
         }
 
-        sb.Append("</tbody></table>");
-        sb.Append("<div class=\"jw-total-qty\">Total qty. (sent) : <strong>").Append(totalQty.ToString(PrintCulture)).Append("</strong></div>");
+        sb.Append("</tbody><tfoot><tr class=\"jw-line-tfoot\">");
+        sb.Append("<td class=\"jw-td-sr\"></td>");
+        sb.Append("<td class=\"jw-item\">Total</td>");
+        sb.Append("<td class=\"jw-td-qty\">").Append(totalQty.ToString(PrintCulture)).Append("</td>");
+        sb.Append("<td class=\"jw-td-num jw-td-num--dash\">&#8212;</td>");
+        sb.Append("<td class=\"jw-td-num\">").Append(sumAmount.ToString("N2", PrintCulture)).Append("</td>");
+        sb.Append("</tr></tfoot></table>");
+
         return sb.ToString();
     }
 }
