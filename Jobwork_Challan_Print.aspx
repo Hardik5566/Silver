@@ -88,7 +88,7 @@
 
         /* Single line item: top (jobwork) uses most of the sheet; company band compact */
         .jw-print-root--single-item .jw-pane--jobwork {
-            flex: 4 1 0;
+            flex: 1 1 0;
         }
         .jw-print-root--single-item .jw-pane--company {
             flex: 1 1 0;
