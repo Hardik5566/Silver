@@ -254,6 +254,14 @@
                             <div class="menu-title">Monthly inward report</div>
                         </a>
                     </li>
+                    <li>
+                        <a href="Monthly_Jobwork_Report.aspx">
+                            <div class="parent-icon">
+                                <i class="bi bi-journal-text"></i>
+                            </div>
+                            <div class="menu-title">Monthly jobwork report</div>
+                        </a>
+                    </li>
 
                 </ul>
                 <!--end navigation-->

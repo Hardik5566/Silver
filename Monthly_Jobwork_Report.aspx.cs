@@ -7,7 +7,7 @@ using System.Web.Script.Serialization;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 
-public partial class Monthly_Inward_Report : Page
+public partial class Monthly_Jobwork_Report : Page
 {
     private static readonly CultureInfo Ci = CultureInfo.GetCultureInfo("en-IN");
 
@@ -21,21 +21,21 @@ public partial class Monthly_Inward_Report : Page
 
         if (!IsPostBack)
         {
-            BindParty();
+            BindJobworkParty();
             BindMonthDropdown();
             BindGrid();
         }
     }
 
-    private void BindParty()
+    private void BindJobworkParty()
     {
-        ddl_party.Items.Clear();
-        ddl_party.Items.Add(new ListItem("All parties", "0"));
-        DataSet ds = BAL_Party.dis_party();
+        ddl_jobwork_party.Items.Clear();
+        ddl_jobwork_party.Items.Add(new ListItem("All jobwork parties", "0"));
+        DataSet ds = BAL_JobworkParty.dis_jobwork_party();
         if (ds.Tables.Count > 0)
         {
             foreach (DataRow r in ds.Tables[0].Rows)
-                ddl_party.Items.Add(new ListItem(r["party_name"].ToString(), r["party_id"].ToString()));
+                ddl_jobwork_party.Items.Add(new ListItem(r["party_name"].ToString(), r["jobwork_party_id"].ToString()));
         }
     }
 
@@ -73,8 +73,8 @@ public partial class Monthly_Inward_Report : Page
         string fromStr = monthStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         string toStr = monthEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        int partyId = int.Parse(ddl_party.SelectedValue, NumberStyles.Integer, CultureInfo.InvariantCulture);
-        DataSet ds = BAL_Report.dis_inward_monthly_report(fromStr, toStr, partyId);
+        int partyId = int.Parse(ddl_jobwork_party.SelectedValue, NumberStyles.Integer, CultureInfo.InvariantCulture);
+        DataSet ds = BAL_Report.dis_jobwork_monthly_report(fromStr, toStr, partyId);
         DataTable table = ds.Tables.Count > 0 ? ds.Tables[0] : null;
 
         grid_rpt.DataSource = table;
@@ -86,8 +86,8 @@ public partial class Monthly_Inward_Report : Page
         {
             foreach (DataRow r in table.Rows)
             {
-                if (r["total_qty_inward"] != DBNull.Value)
-                    sumQty += Convert.ToInt64(r["total_qty_inward"], CultureInfo.InvariantCulture);
+                if (r["total_qty_sent"] != DBNull.Value)
+                    sumQty += Convert.ToInt64(r["total_qty_sent"], CultureInfo.InvariantCulture);
                 if (r["total_amount"] != DBNull.Value)
                     sumAmt += Convert.ToDecimal(r["total_amount"], CultureInfo.InvariantCulture);
             }
@@ -99,22 +99,22 @@ public partial class Monthly_Inward_Report : Page
             grid_rpt.FooterRow.Visible = hasRows;
             if (hasRows)
             {
-            grid_rpt.FooterRow.TableSection = TableRowSection.TableFooter;
+                grid_rpt.FooterRow.TableSection = TableRowSection.TableFooter;
 
-            grid_rpt.FooterRow.Cells[0].ColumnSpan = 3;
-            grid_rpt.FooterRow.Cells[0].Text = "Month total";
-            grid_rpt.FooterRow.Cells[0].HorizontalAlign = HorizontalAlign.Right;
-            grid_rpt.FooterRow.Cells[0].CssClass = "mir-ft-label";
-            grid_rpt.FooterRow.Cells.RemoveAt(2);
-            grid_rpt.FooterRow.Cells.RemoveAt(1);
+                grid_rpt.FooterRow.Cells[0].ColumnSpan = 3;
+                grid_rpt.FooterRow.Cells[0].Text = "Month total";
+                grid_rpt.FooterRow.Cells[0].HorizontalAlign = HorizontalAlign.Right;
+                grid_rpt.FooterRow.Cells[0].CssClass = "mjr-ft-label";
+                grid_rpt.FooterRow.Cells.RemoveAt(2);
+                grid_rpt.FooterRow.Cells.RemoveAt(1);
 
-            grid_rpt.FooterRow.Cells[1].Text = sumQty.ToString("N0", Ci);
-            grid_rpt.FooterRow.Cells[1].HorizontalAlign = HorizontalAlign.Right;
-            grid_rpt.FooterRow.Cells[1].CssClass = "mir-ft-val";
+                grid_rpt.FooterRow.Cells[1].Text = sumQty.ToString("N0", Ci);
+                grid_rpt.FooterRow.Cells[1].HorizontalAlign = HorizontalAlign.Right;
+                grid_rpt.FooterRow.Cells[1].CssClass = "mjr-ft-val";
 
-            grid_rpt.FooterRow.Cells[2].Text = sumAmt.ToString("N2", Ci);
-            grid_rpt.FooterRow.Cells[2].HorizontalAlign = HorizontalAlign.Right;
-            grid_rpt.FooterRow.Cells[2].CssClass = "mir-ft-val";
+                grid_rpt.FooterRow.Cells[2].Text = sumAmt.ToString("N2", Ci);
+                grid_rpt.FooterRow.Cells[2].HorizontalAlign = HorizontalAlign.Right;
+                grid_rpt.FooterRow.Cells[2].CssClass = "mjr-ft-val";
             }
         }
 
@@ -145,8 +145,8 @@ public partial class Monthly_Inward_Report : Page
         var sb = new StringBuilder();
         sb.Append("<script type=\"text/javascript\">");
         sb.Append("(function(){");
-        sb.Append("var el=document.getElementById('mirChart');if(!el)return;");
-        sb.Append("if(window.mirApexChart){window.mirApexChart.destroy();window.mirApexChart=null;}");
+        sb.Append("var el=document.getElementById('mjrChart');if(!el)return;");
+        sb.Append("if(window.mjrApexChart){window.mjrApexChart.destroy();window.mjrApexChart=null;}");
         sb.Append("var labels=").Append(labelsJson).Append(";");
         sb.Append("if(!labels.length){el.innerHTML='<div class=\"text-center text-muted p-5\">No data for chart.</div>';return;}");
         sb.Append("var options={");
@@ -162,8 +162,8 @@ public partial class Monthly_Inward_Report : Page
         sb.Append("markers:{size:4,strokeWidth:2,hover:{size:6}},");
         sb.Append("grid:{borderColor:'#edf0f3',strokeDashArray:4}");
         sb.Append("};");
-        sb.Append("window.mirApexChart=new ApexCharts(el,options);");
-        sb.Append("window.mirApexChart.render();");
+        sb.Append("window.mjrApexChart=new ApexCharts(el,options);");
+        sb.Append("window.mjrApexChart.render();");
         sb.Append("})();");
         sb.Append("</script>");
 

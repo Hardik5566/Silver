@@ -43,10 +43,13 @@
         .inward-sheet__num--empty { font-weight: 500; color: #ced4da !important; background: #f8f9fa !important; }
         .inward-sheet__num--empty .inward-sheet__ico { color: #dee2e6; }
         .rpt-filter-card .form-label { font-size: 0.8rem; font-weight: 600; color: #495057; }
+        .inward-actions a, .inward-actions button { display: inline-block; padding: 4px 6px; border-radius: 4px; border: none; background: transparent; }
+        .inward-actions a:hover, .inward-actions button:hover { background: #e9ecef; }
     </style>
 </asp:Content>
 <asp:Content ID="c3" ContentPlaceHolderID="body" runat="server">
     <asp:ScriptManager ID="sm1" runat="server"></asp:ScriptManager>
+    <div class="messagealert" id="alert_container"></div>
 
     <div class="w-100">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -77,7 +80,7 @@
         <div class="inward-card shadow-sm">
             <div class="table-responsive">
                 <asp:GridView ID="grid_rpt" runat="server" CssClass="table inward-grid mb-0" AutoGenerateColumns="false" DataKeyNames="inward_id"
-                    GridLines="None" ShowHeaderWhenEmpty="true" OnRowDataBound="grid_rpt_RowDataBound">
+                    GridLines="None" ShowHeaderWhenEmpty="true" OnRowDataBound="grid_rpt_RowDataBound" OnRowCommand="grid_rpt_RowCommand">
                     <EmptyDataTemplate>
                         <div class="p-4 text-center text-muted">No challans in this date range.</div>
                     </EmptyDataTemplate>
@@ -98,9 +101,11 @@
                                 <asp:Literal ID="lit_rpt_parts" runat="server" Mode="PassThrough"></asp:Literal>
                             </ItemTemplate>
                         </asp:TemplateField>
-                        <asp:TemplateField HeaderText="" ItemStyle-CssClass="text-end text-nowrap" ItemStyle-Width="88px">
+                        <asp:TemplateField HeaderText="" ItemStyle-CssClass="text-end inward-actions text-nowrap" ItemStyle-Width="100px">
                             <ItemTemplate>
-                                <a class="btn btn-sm btn-outline-primary py-0" href='<%# "Inward_Challan_Entry.aspx?id=" + Eval("inward_id").ToString() %>'>Open</a>
+                                <asp:LinkButton runat="server" CommandName="edit" CommandArgument='<%# Eval("inward_id") %>' CssClass="text-secondary" ToolTip="Edit" aria-label="Edit"><i class="bi bi-pencil"></i></asp:LinkButton>
+                                <asp:LinkButton runat="server" CommandName="del" CommandArgument='<%# Eval("inward_id") %>' CssClass="text-danger" ToolTip="Delete" aria-label="Delete"
+                                    OnClientClick="return confirm('Delete this challan?');"><i class="bi bi-trash"></i></asp:LinkButton>
                             </ItemTemplate>
                         </asp:TemplateField>
                     </Columns>

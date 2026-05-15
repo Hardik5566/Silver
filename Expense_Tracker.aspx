@@ -10,6 +10,18 @@
         .exp-grid > tbody > tr:hover > td { background: #fcfcfd; }
         .rpt-filter-card .form-label { font-size: 0.8rem; font-weight: 600; color: #495057; }
         .mono { font-variant-numeric: tabular-nums; }
+        .exp-panel-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #495057;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 12px 14px;
+            border-bottom: 1px solid #dee2e6;
+            background: #f8f9fa;
+        }
+        .exp-sum-grid .exp-num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+        .exp-sum-grid tfoot td { padding: 10px 12px; border-top: 2px solid #dee2e6; background: #f8f9fa; font-weight: 600; }
         .modal_form_footer { padding: 15px; border-top: 1px solid #dee2e6; display: flex; justify-content: space-between; }
     </style>
 </asp:Content>
@@ -41,33 +53,57 @@
             </div>
         </div>
 
-        <div class="exp-card shadow-sm">
-            <div class="table-responsive">
-                <asp:GridView ID="grid_exp" runat="server" CssClass="table exp-grid mb-0" AutoGenerateColumns="false"
-                    GridLines="None" ShowHeaderWhenEmpty="true" DataKeyNames="expense_id" OnRowCommand="grid_exp_RowCommand">
-                    <EmptyDataTemplate>
-                        <div class="p-4 text-center text-muted">No expenses in this date range.</div>
-                    </EmptyDataTemplate>
-                    <Columns>
-                        <asp:BoundField DataField="sr" HeaderText="Sr" ItemStyle-Width="52px" ItemStyle-CssClass="text-muted text-center mono" HeaderStyle-CssClass="text-center" />
-                        <asp:BoundField DataField="user_name" HeaderText="User name" />
-                        <asp:BoundField DataField="expense_date" HeaderText="Expense date" DataFormatString="{0:dd-MMM-yyyy}" HtmlEncode="true" ItemStyle-CssClass="text-nowrap" />
-                        <asp:TemplateField HeaderText="Amount (payment mode)" ItemStyle-CssClass="mono">
-                            <ItemTemplate>
-                                <span class="fw-semibold">₹<%# string.Format(System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"), "{0:N2}", Eval("amount")) %></span>
-                                <span class="text-muted"> (<%# Eval("payment_mode") %>)</span>
-                            </ItemTemplate>
-                        </asp:TemplateField>
-                        <asp:BoundField DataField="note" HeaderText="Note" ItemStyle-CssClass="text-break" />
-                        <asp:TemplateField HeaderText="" ItemStyle-CssClass="text-end text-nowrap exp-actions" ItemStyle-Width="90px">
-                            <ItemTemplate>
-                                <asp:LinkButton runat="server" CommandName="edt" CommandArgument='<%# Eval("expense_id") %>' CssClass="text-secondary me-2" ToolTip="Edit" aria-label="Edit"><i class="bi bi-pencil"></i></asp:LinkButton>
-                                <asp:LinkButton runat="server" CommandName="dlt" CommandArgument='<%# Eval("expense_id") %>' CssClass="text-danger" ToolTip="Delete" aria-label="Delete"
-                                    OnClientClick="return confirm('Delete this expense?');"><i class="bi bi-trash"></i></asp:LinkButton>
-                            </ItemTemplate>
-                        </asp:TemplateField>
-                    </Columns>
-                </asp:GridView>
+        <div class="row g-3 align-items-stretch">
+            <div class="col-lg-7">
+                <div class="exp-card shadow-sm h-100 d-flex flex-column">
+                    <div class="exp-panel-title">Expense list</div>
+                    <div class="table-responsive flex-grow-1">
+                        <asp:GridView ID="grid_exp" runat="server" CssClass="table exp-grid mb-0" AutoGenerateColumns="false"
+                            GridLines="None" ShowHeaderWhenEmpty="true" DataKeyNames="expense_id" OnRowCommand="grid_exp_RowCommand">
+                            <EmptyDataTemplate>
+                                <div class="p-4 text-center text-muted">No expenses in this date range.</div>
+                            </EmptyDataTemplate>
+                            <Columns>
+                                <asp:BoundField DataField="sr" HeaderText="Sr" ItemStyle-Width="52px" ItemStyle-CssClass="text-muted text-center mono" HeaderStyle-CssClass="text-center" />
+                                <asp:BoundField DataField="user_name" HeaderText="User name" />
+                                <asp:BoundField DataField="expense_date" HeaderText="Expense date" DataFormatString="{0:dd-MMM-yyyy}" HtmlEncode="true" ItemStyle-CssClass="text-nowrap" />
+                                <asp:TemplateField HeaderText="Amount (payment mode)" ItemStyle-CssClass="mono">
+                                    <ItemTemplate>
+                                        <span class="fw-semibold">₹<%# string.Format(System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"), "{0:N2}", Eval("amount")) %></span>
+                                        <span class="text-muted"> (<%# Eval("payment_mode") %>)</span>
+                                    </ItemTemplate>
+                                </asp:TemplateField>
+                                <asp:BoundField DataField="note" HeaderText="Note" ItemStyle-CssClass="text-break" />
+                                <asp:TemplateField HeaderText="" ItemStyle-CssClass="text-end text-nowrap exp-actions" ItemStyle-Width="90px">
+                                    <ItemTemplate>
+                                        <asp:LinkButton runat="server" CommandName="edt" CommandArgument='<%# Eval("expense_id") %>' CssClass="text-secondary me-2" ToolTip="Edit" aria-label="Edit"><i class="bi bi-pencil"></i></asp:LinkButton>
+                                        <asp:LinkButton runat="server" CommandName="dlt" CommandArgument='<%# Eval("expense_id") %>' CssClass="text-danger" ToolTip="Delete" aria-label="Delete"
+                                            OnClientClick="return confirm('Delete this expense?');"><i class="bi bi-trash"></i></asp:LinkButton>
+                                    </ItemTemplate>
+                                </asp:TemplateField>
+                            </Columns>
+                        </asp:GridView>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="exp-card shadow-sm h-100 d-flex flex-column">
+                    <div class="exp-panel-title">User-wise month total</div>
+                    <div class="table-responsive flex-grow-1">
+                        <asp:GridView ID="grid_user_sum" runat="server" CssClass="table exp-grid exp-sum-grid mb-0" AutoGenerateColumns="false"
+                            GridLines="None" ShowHeaderWhenEmpty="true" ShowFooter="true">
+                            <EmptyDataTemplate>
+                                <div class="p-4 text-center text-muted">No totals for this range.</div>
+                            </EmptyDataTemplate>
+                            <Columns>
+                                <asp:BoundField DataField="month_label" HeaderText="Month" ItemStyle-CssClass="text-nowrap fw-medium" />
+                                <asp:BoundField DataField="user_name" HeaderText="User name" />
+                                <asp:BoundField DataField="entry_count" HeaderText="Entries" ItemStyle-CssClass="exp-num" HeaderStyle-CssClass="text-end" DataFormatString="{0:N0}" HtmlEncode="false" />
+                                <asp:BoundField DataField="total_amount" HeaderText="Total" DataFormatString="₹{0:N2}" HtmlEncode="false" ItemStyle-CssClass="exp-num fw-semibold" HeaderStyle-CssClass="text-end" />
+                            </Columns>
+                        </asp:GridView>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

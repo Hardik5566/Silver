@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
 using System.Web.UI;
@@ -6,6 +7,8 @@ using System.Web.UI.WebControls;
 
 public partial class Expense_Tracker : Page
 {
+    private static readonly CultureInfo Ci = CultureInfo.GetCultureInfo("en-IN");
+
     public enum Msg { Success, Error, Warning }
 
     private string GetSelectedPaymentMode()
@@ -93,8 +96,135 @@ public partial class Expense_Tracker : Page
     private void BindGrid()
     {
         DataSet ds = BAL_Expense.dis_expense(txt_from.Text, txt_to.Text);
-        grid_exp.DataSource = ds.Tables.Count > 0 ? ds.Tables[0] : null;
+        DataTable expenses = ds.Tables.Count > 0 ? ds.Tables[0] : null;
+
+        grid_exp.DataSource = expenses;
         grid_exp.DataBind();
+
+        BindUserSummary(expenses);
+    }
+
+    private void BindUserSummary(DataTable expenses)
+    {
+        DataTable table = BuildSummaryFromExpenses(expenses);
+
+        grid_user_sum.DataSource = table;
+        grid_user_sum.DataBind();
+
+        decimal sumAmt = 0m;
+        long sumEntries = 0;
+        if (table != null)
+        {
+            foreach (DataRow r in table.Rows)
+            {
+                if (r["entry_count"] != DBNull.Value)
+                    sumEntries += Convert.ToInt64(r["entry_count"], CultureInfo.InvariantCulture);
+                if (r["total_amount"] != DBNull.Value)
+                    sumAmt += Convert.ToDecimal(r["total_amount"], CultureInfo.InvariantCulture);
+            }
+        }
+
+        if (grid_user_sum.FooterRow != null)
+        {
+            bool hasRows = table != null && table.Rows.Count > 0;
+            grid_user_sum.FooterRow.Visible = hasRows;
+            if (hasRows)
+            {
+                grid_user_sum.FooterRow.TableSection = TableRowSection.TableFooter;
+                grid_user_sum.FooterRow.Cells[0].ColumnSpan = 2;
+                grid_user_sum.FooterRow.Cells[0].Text = "Grand total";
+                grid_user_sum.FooterRow.Cells[0].HorizontalAlign = HorizontalAlign.Right;
+                grid_user_sum.FooterRow.Cells.RemoveAt(1);
+
+                grid_user_sum.FooterRow.Cells[1].Text = sumEntries.ToString("N0", Ci);
+                grid_user_sum.FooterRow.Cells[1].HorizontalAlign = HorizontalAlign.Right;
+
+                grid_user_sum.FooterRow.Cells[2].Text = sumAmt.ToString("C2", Ci);
+                grid_user_sum.FooterRow.Cells[2].HorizontalAlign = HorizontalAlign.Right;
+            }
+        }
+    }
+
+    private sealed class ExpenseMonthUserSum
+    {
+        public DateTime MonthStart;
+        public string UserName;
+        public long EntryCount;
+        public decimal TotalAmount;
+    }
+
+    private static DataTable BuildSummaryFromExpenses(DataTable expenses)
+    {
+        var table = new DataTable();
+        table.Columns.Add("month_label", typeof(string));
+        table.Columns.Add("user_name", typeof(string));
+        table.Columns.Add("entry_count", typeof(long));
+        table.Columns.Add("total_amount", typeof(decimal));
+
+        if (expenses == null || expenses.Rows.Count == 0)
+            return table;
+
+        var map = new Dictionary<string, ExpenseMonthUserSum>(StringComparer.Ordinal);
+
+        foreach (DataRow r in expenses.Rows)
+        {
+            DateTime ed = ParseExpenseDate(r["expense_date"]);
+            var monthStart = new DateTime(ed.Year, ed.Month, 1);
+            string userId = r["user_id"] != DBNull.Value ? r["user_id"].ToString() : "0";
+            string key = monthStart.ToString("yyyy-MM", CultureInfo.InvariantCulture) + "|" + userId;
+
+            ExpenseMonthUserSum row;
+            if (!map.TryGetValue(key, out row))
+            {
+                row = new ExpenseMonthUserSum
+                {
+                    MonthStart = monthStart,
+                    UserName = r["user_name"] != DBNull.Value ? r["user_name"].ToString() : "—",
+                    EntryCount = 0,
+                    TotalAmount = 0m
+                };
+                map[key] = row;
+            }
+
+            row.EntryCount++;
+            row.TotalAmount += ParseAmount(r["amount"]);
+        }
+
+        var list = new List<ExpenseMonthUserSum>(map.Values);
+        list.Sort((a, b) =>
+        {
+            int c = b.MonthStart.CompareTo(a.MonthStart);
+            return c != 0 ? c : string.Compare(a.UserName, b.UserName, StringComparison.CurrentCultureIgnoreCase);
+        });
+
+        foreach (ExpenseMonthUserSum s in list)
+            table.Rows.Add(s.MonthStart.ToString("MMMM yyyy", Ci), s.UserName, s.EntryCount, s.TotalAmount);
+
+        return table;
+    }
+
+    private static DateTime ParseExpenseDate(object value)
+    {
+        if (value == null || value == DBNull.Value)
+            return DateTime.Today;
+        if (value is DateTime)
+            return (DateTime)value;
+        DateTime d;
+        if (DateTime.TryParse(value.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
+            return d;
+        DateTime.TryParse(value.ToString(), out d);
+        return d;
+    }
+
+    private static decimal ParseAmount(object value)
+    {
+        if (value == null || value == DBNull.Value)
+            return 0m;
+        if (value is decimal)
+            return (decimal)value;
+        decimal amt;
+        decimal.TryParse(value.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out amt);
+        return amt;
     }
 
     protected void btn_filter_Click(object sender, EventArgs e)

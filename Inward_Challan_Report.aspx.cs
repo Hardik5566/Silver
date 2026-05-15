@@ -5,8 +5,22 @@ using System.Web.UI.WebControls;
 
 public partial class Inward_Challan_Report : Page
 {
+    public enum Msg { Success, Error, Warning }
+
+    protected void ShowMsg(string msg, Msg t)
+    {
+        ScriptManager.RegisterStartupScript(this, GetType(), Guid.NewGuid().ToString(),
+            "ShowMessage('" + msg.Replace("'", "\\'") + "','" + t + "');", true);
+    }
+
     protected void Page_Load(object sender, EventArgs e)
     {
+        if (Session["user_id"] == null)
+        {
+            Response.Redirect("Default.aspx");
+            return;
+        }
+
         if (!IsPostBack)
         {
             string mode = (Request.QueryString["mode"] ?? "").Trim().ToLowerInvariant();
@@ -52,6 +66,30 @@ public partial class Inward_Challan_Report : Page
         var drv = e.Row.DataItem as DataRowView;
         if (drv == null) return;
         lit.Text = InwardChallanLineHtml.BuildPartsSheet(drv);
+    }
+
+    protected void grid_rpt_RowCommand(object sender, GridViewCommandEventArgs e)
+    {
+        string id = e.CommandArgument != null ? e.CommandArgument.ToString() : "";
+        if (e.CommandName == "edit")
+        {
+            Response.Redirect("Inward_Challan_Entry.aspx?id=" + id);
+            return;
+        }
+        if (e.CommandName == "del")
+        {
+            DataSet ds = BAL_Inward.dlt_inward_challan(id, Session["user_id"].ToString());
+            if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
+            {
+                if (ds.Tables[0].Rows[0]["Success"].ToString().ToLower() == "true")
+                {
+                    ShowMsg("Deleted.", Msg.Success);
+                    BindGrid();
+                }
+                else
+                    ShowMsg(ds.Tables[0].Rows[0]["Message"].ToString(), Msg.Warning);
+            }
+        }
     }
 
     protected void btn_filter_Click(object sender, EventArgs e)

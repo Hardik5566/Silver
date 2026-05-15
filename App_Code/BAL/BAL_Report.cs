@@ -14,4 +14,14 @@ public class BAL_Report
         cmd.Parameters.Add(p.intparam("@party_id", party_id.ToString(CultureInfo.InvariantCulture)));
         return command.ExtQueryDS(cmd);
     }
+
+    public static DataSet dis_jobwork_monthly_report(string from_date, string to_date, int jobwork_party_id)
+    {
+        SqlCommand cmd = new SqlCommand { CommandText = "dis_jobwork_monthly_report_sp" };
+        parameter p = new parameter();
+        cmd.Parameters.Add(p.stringparam("@from_date", from_date));
+        cmd.Parameters.Add(p.stringparam("@to_date", to_date));
+        cmd.Parameters.Add(p.intparam("@jobwork_party_id", jobwork_party_id.ToString(CultureInfo.InvariantCulture)));
+        return command.ExtQueryDS(cmd);
+    }
 }

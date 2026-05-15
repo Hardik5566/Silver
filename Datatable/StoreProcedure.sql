@@ -1771,6 +1771,53 @@ BEGIN
 END
 GO
 
+
+IF OBJECT_ID('dbo.dis_jobwork_monthly_report_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_jobwork_monthly_report_sp;
+GO
+CREATE PROCEDURE dbo.dis_jobwork_monthly_report_sp
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50),
+    @jobwork_party_id BIGINT = 0
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+    DECLARE @jpid BIGINT = @jobwork_party_id;
+
+    /* One row per calendar day in [@f, @t]; days with no jobwork show zeros. */
+    ;WITH days AS (
+        SELECT @f AS d
+        UNION ALL
+        SELECT DATEADD(DAY, 1, d) FROM days WHERE d < @t
+    ),
+    agg AS (
+        SELECT
+            CAST(h.challan_date AS DATE) AS dt,
+            COUNT(DISTINCT h.jobwork_party_id) AS total_party_jobwork,
+            COUNT(DISTINCT d.jobwork_part_id) AS total_uniq_part_jobwork,
+            SUM(CAST(d.qty_sent AS BIGINT)) AS total_qty_sent,
+            SUM(CAST(d.qty_sent AS DECIMAL(18, 2)) * ISNULL(d.rate_at_time, 0)) AS total_amount
+        FROM dbo.tbl_jobwork_challan AS h
+        INNER JOIN dbo.tbl_jobwork_challan_detail AS d ON d.jobwork_challan_id = h.jobwork_challan_id AND d.status = 1
+        WHERE h.status = 1
+          AND CAST(h.challan_date AS DATE) BETWEEN @f AND @t
+          AND (@jpid = 0 OR h.jobwork_party_id = @jpid)
+        GROUP BY CAST(h.challan_date AS DATE)
+    )
+    SELECT
+        days.d AS report_date,
+        ISNULL(a.total_party_jobwork, 0) AS total_party_jobwork,
+        ISNULL(a.total_uniq_part_jobwork, 0) AS total_uniq_part_jobwork,
+        ISNULL(a.total_qty_sent, 0) AS total_qty_sent,
+        ISNULL(a.total_amount, 0) AS total_amount
+    FROM days
+    LEFT JOIN agg AS a ON a.dt = days.d
+    ORDER BY days.d
+    OPTION (MAXRECURSION 400);
+END
+GO
+
 IF OBJECT_ID('dbo.get_inward_for_edit_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.get_inward_for_edit_sp;
 GO
 CREATE PROCEDURE dbo.get_inward_for_edit_sp
@@ -2008,7 +2055,7 @@ GO
 
 IF OBJECT_ID('dbo.dlt_inward_challan_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_inward_challan_sp;
 GO
-CREATE PROCEDURE dbo.dlt_inward_challan_sp
+alter PROCEDURE dbo.dlt_inward_challan_sp
     @inward_id NVARCHAR(50),
     @by NVARCHAR(50)
 AS
@@ -2018,24 +2065,27 @@ BEGIN
         DECLARE @id BIGINT = CAST(@inward_id AS BIGINT);
         DECLARE @uid INT = CAST(@by AS INT);
 
-        IF EXISTS (
-            SELECT 1 FROM dbo.tbl_outward_history AS oh
-            INNER JOIN dbo.tbl_inward_challan_details AS d ON d.inward_detail_id = oh.inward_detail_id
-            WHERE d.inward_id = @id AND oh.status = 1)
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_inward_challan WHERE inward_id = @id AND status = 1)
         BEGIN
-            SELECT 'False' AS Success, N'Cannot delete — outward history exists. Reverse outward first.' AS Message;
+            SELECT 'False' AS Success, N'Challan not found or already deleted.' AS Message;
             RETURN;
         END
 
-        IF EXISTS (SELECT 1 FROM dbo.tbl_inward_challan_details WHERE inward_id = @id AND status = 1 AND qty_out_done > 0)
-        BEGIN
-            SELECT 'False' AS Success, N'Cannot delete — qty already issued out on lines.' AS Message;
-            RETURN;
-        END
+        /* Soft-delete all outward rows for this challan (no need to reverse outward first). */
+        UPDATE oh
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        FROM dbo.tbl_outward_history AS oh
+        INNER JOIN dbo.tbl_inward_challan_details AS d ON d.inward_detail_id = oh.inward_detail_id
+        WHERE d.inward_id = @id AND oh.status = 1;
 
         UPDATE dbo.tbl_inward_challan_details
-        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
-        WHERE inward_id = @id;
+        SET qty_out_done = 0,
+            status = 0,
+            delete_by = @uid,
+            delete_date = dbo.get_date(),
+            modify_by = @uid,
+            modify_date = dbo.get_date()
+        WHERE inward_id = @id AND status = 1;
 
         UPDATE dbo.tbl_inward_challan
         SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
