@@ -42,9 +42,20 @@
         </div>
 
         <div class="out-card shadow-sm">
+            <div class="px-3 pt-3 pb-0">
+                <div class="row mb-3">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label">Search</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="txt_jw_recv_search" class="form-control" placeholder="Date, slip, challan, party, part..." autocomplete="off" />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
-                <asp:GridView ID="grid_recv" runat="server" CssClass="table out-grid mb-0" AutoGenerateColumns="false"
-                    GridLines="None" ShowHeaderWhenEmpty="true">
+                <asp:GridView ID="grid_recv" runat="server" ClientIDMode="Static" CssClass="table out-grid mb-0" AutoGenerateColumns="false"
+                    UseAccessibleHeader="true" GridLines="None" ShowHeaderWhenEmpty="true">
                     <EmptyDataTemplate>
                         <div class="p-4 text-center text-muted">No receive entries in this date range.</div>
                     </EmptyDataTemplate>
@@ -66,4 +77,19 @@
             </div>
         </div>
     </div>
+
+    <script type="text/javascript">
+        function filterJwRecvGrid() {
+            var value = $("#txt_jw_recv_search").val().toLowerCase().trim();
+            $("#grid_recv tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
+        $(document).ready(function () {
+            $("#txt_jw_recv_search").on("keyup input", filterJwRecvGrid);
+            filterJwRecvGrid();
+        });
+    </script>
 </asp:Content>

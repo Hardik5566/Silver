@@ -128,9 +128,22 @@
                         </a>
                     </li>
                     <li>
-                        <a href="Expense_Tracker.aspx" title="Expense">
-                            <div class="parent-icon"><i class="bi bi-wallet"></i></div>
-                            <div class="menu-title">Expense</div>
+                        <a href="My_Expense.aspx" title="My expense">
+                            <div class="parent-icon"><i class="bi bi-wallet2"></i></div>
+                            <div class="menu-title">My expense</div>
+                        </a>
+                    </li>
+                    <li class="menu-label">Accounts</li>
+                    <li>
+                        <a href="Account_Outstanding.aspx" title="Account outstanding">
+                            <div class="parent-icon"><i class="bi bi-journal-bookmark"></i></div>
+                            <div class="menu-title">Outstanding</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Account_Ledger.aspx" title="Account ledger">
+                            <div class="parent-icon"><i class="bi bi-journal-text"></i></div>
+                            <div class="menu-title">Ledger</div>
                         </a>
                     </li>
                     <li class="menu-label">MASTER</li>
@@ -228,6 +241,12 @@
                         <a href="Jobwork_Receive_History.aspx" title="Jobwork receive history">
                             <div class="parent-icon"><i class="bi bi-truck"></i></div>
                             <div class="menu-title">Jobwork receive history</div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="Jobwork_Invoice_Entry.aspx" title="Jobwork invoice">
+                            <div class="parent-icon"><i class="bi bi-file-earmark-text"></i></div>
+                            <div class="menu-title">Jobwork invoice</div>
                         </a>
                     </li>
 

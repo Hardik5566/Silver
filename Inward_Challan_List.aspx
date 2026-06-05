@@ -91,9 +91,21 @@
         </div>
 
         <div class="inward-card shadow-sm">
+            <div class="px-3 pt-3 pb-0">
+                <div class="row mb-3">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label">Search</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="txt_inward_search" class="form-control" placeholder="Date, challan no, party, part..." autocomplete="off" />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
                 <asp:GridView ID="grid_inward" runat="server" ClientIDMode="Static" CssClass="table inward-grid mb-0"
-                    AutoGenerateColumns="false" DataKeyNames="inward_id" OnRowCommand="grid_inward_RowCommand" OnRowDataBound="grid_inward_RowDataBound"
+                    AutoGenerateColumns="false" DataKeyNames="inward_id" UseAccessibleHeader="true"
+                    OnRowCommand="grid_inward_RowCommand" OnRowDataBound="grid_inward_RowDataBound"
                     EnableViewState="true" GridLines="None" ShowHeaderWhenEmpty="true">
                     <EmptyDataTemplate>
                         <div class="p-4 text-center text-muted">No challans with <strong>pending</strong> quantity. Fully dispatched challans are under <strong>Challan history</strong>. Click <strong>New challan</strong> to add one.</div>
@@ -193,6 +205,19 @@
     </div>
 
     <script type="text/javascript">
+        function filterInwardGrid() {
+            var value = $("#txt_inward_search").val().toLowerCase().trim();
+            $("#grid_inward tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
+        $(document).ready(function () {
+            $("#txt_inward_search").on("keyup input", filterInwardGrid);
+            filterInwardGrid();
+        });
+
         function showOutModal() {
             var el = document.getElementById('modal_out');
             if (el && window.bootstrap) new bootstrap.Modal(el).show();

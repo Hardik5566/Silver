@@ -25,8 +25,17 @@
 
     <div class="card">
         <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-4 col-sm-6">
+                    <label class="form-label">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="txt_party_search" class="form-control" placeholder="Party name, contact, mobile, GST..." autocomplete="off" />
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
-                <asp:GridView ID="grid_party" ClientIDMode="Static" CssClass="table tbl_bottem_boder align-middle mb-0" runat="server" AutoGenerateColumns="false" OnRowCommand="grid_party_RowCommand">
+                <asp:GridView ID="grid_party" ClientIDMode="Static" CssClass="table tbl_bottem_boder align-middle mb-0" runat="server" AutoGenerateColumns="false" UseAccessibleHeader="true" OnRowCommand="grid_party_RowCommand">
                     <Columns>
                         <asp:TemplateField HeaderText="Sr" ItemStyle-Width="50px">
                             <ItemTemplate><%# Container.DataItemIndex+1 %></ItemTemplate>
@@ -107,7 +116,18 @@
             return true;
         }
 
+        function filterPartyGrid() {
+            var value = $("#txt_party_search").val().toLowerCase().trim();
+            $("#grid_party tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
         $(document).ready(function () {
+            $("#txt_party_search").on("keyup input", filterPartyGrid);
+            filterPartyGrid();
+
             $(".btn_add").click(function () {
                 $("#<%=hd_action.ClientID%>").val("save");
                 $("#<%=txt_party_name.ClientID%>, #<%=txt_contact.ClientID%>, #<%=txt_mobile.ClientID%>, #<%=txt_gst.ClientID%>, #<%=txt_address.ClientID%>").val("");

@@ -44,9 +44,20 @@
         </div>
 
         <div class="inv-card shadow-sm">
+            <div class="px-3 pt-3 pb-0">
+                <div class="row mb-3">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label">Search</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="txt_invoice_search" class="form-control" placeholder="Invoice no, date, party, kind, total..." autocomplete="off" />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
                 <asp:GridView ID="grid_inv" runat="server" ClientIDMode="Static" CssClass="table inv-grid mb-0"
-                    AutoGenerateColumns="false" DataKeyNames="invoice_id" OnRowCommand="grid_inv_RowCommand"
+                    AutoGenerateColumns="false" DataKeyNames="invoice_id" UseAccessibleHeader="true" OnRowCommand="grid_inv_RowCommand"
                     GridLines="None" ShowHeaderWhenEmpty="true">
                     <EmptyDataTemplate>
                         <div class="p-4 text-center text-muted">No invoices in this range. Use <strong>New invoice</strong> to create one.</div>
@@ -73,4 +84,19 @@
             </div>
         </div>
     </div>
+
+    <script type="text/javascript">
+        function filterInvoiceGrid() {
+            var value = $("#txt_invoice_search").val().toLowerCase().trim();
+            $("#grid_inv tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
+        $(document).ready(function () {
+            $("#txt_invoice_search").on("keyup input", filterInvoiceGrid);
+            filterInvoiceGrid();
+        });
+    </script>
 </asp:Content>

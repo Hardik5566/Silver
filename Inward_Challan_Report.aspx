@@ -78,9 +78,20 @@
         </div>
 
         <div class="inward-card shadow-sm">
+            <div class="px-3 pt-3 pb-0">
+                <div class="row mb-3">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label">Search</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="txt_inward_rpt_search" class="form-control" placeholder="Status, date, challan no, party, part..." autocomplete="off" />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
-                <asp:GridView ID="grid_rpt" runat="server" CssClass="table inward-grid mb-0" AutoGenerateColumns="false" DataKeyNames="inward_id"
-                    GridLines="None" ShowHeaderWhenEmpty="true" OnRowDataBound="grid_rpt_RowDataBound" OnRowCommand="grid_rpt_RowCommand">
+                <asp:GridView ID="grid_rpt" runat="server" ClientIDMode="Static" CssClass="table inward-grid mb-0" AutoGenerateColumns="false" DataKeyNames="inward_id"
+                    UseAccessibleHeader="true" GridLines="None" ShowHeaderWhenEmpty="true" OnRowDataBound="grid_rpt_RowDataBound" OnRowCommand="grid_rpt_RowCommand">
                     <EmptyDataTemplate>
                         <div class="p-4 text-center text-muted">No challans in this date range.</div>
                     </EmptyDataTemplate>
@@ -113,4 +124,19 @@
             </div>
         </div>
     </div>
+
+    <script type="text/javascript">
+        function filterInwardRptGrid() {
+            var value = $("#txt_inward_rpt_search").val().toLowerCase().trim();
+            $("#grid_rpt tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
+        $(document).ready(function () {
+            $("#txt_inward_rpt_search").on("keyup input", filterInwardRptGrid);
+            filterInwardRptGrid();
+        });
+    </script>
 </asp:Content>

@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Data;
+using System.Globalization;
 using System.Web.UI;
 
 public partial class Home : System.Web.UI.Page
 {
+    private static readonly CultureInfo Ci = CultureInfo.GetCultureInfo("en-IN");
+
     protected void Page_Load(object sender, EventArgs e)
     {
         if (!IsPostBack)
@@ -23,6 +26,9 @@ public partial class Home : System.Web.UI.Page
         lit_count_jobwork_party.Text = F(r, "total_jobwork_party");
         lit_count_jobwork_part.Text = F(r, "total_jobwork_part");
 
+        lit_total_debit.Text = FMoney(r, "total_debit");
+        lit_total_credit.Text = FMoneyAbs(r, "total_credit");
+
         lit_count_active_challan.Text = F(r, "total_active_challan");
         lit_count_active_item.Text = F(r, "total_active_item_qty");
 
@@ -41,5 +47,29 @@ public partial class Home : System.Web.UI.Page
         if (r == null || r.Table == null || !r.Table.Columns.Contains(col) || r[col] == DBNull.Value)
             return "0";
         return r[col].ToString();
+    }
+
+    private static string FMoney(DataRow r, string col)
+    {
+        if (r == null || r.Table == null || !r.Table.Columns.Contains(col) || r[col] == DBNull.Value)
+            return "₹0.00";
+        decimal amt;
+        if (r[col] is decimal)
+            amt = (decimal)r[col];
+        else if (!decimal.TryParse(r[col].ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out amt))
+            return "₹0.00";
+        return "₹" + amt.ToString("N2", Ci);
+    }
+
+    private static string FMoneyAbs(DataRow r, string col)
+    {
+        if (r == null || r.Table == null || !r.Table.Columns.Contains(col) || r[col] == DBNull.Value)
+            return "₹0.00";
+        decimal amt;
+        if (r[col] is decimal)
+            amt = (decimal)r[col];
+        else if (!decimal.TryParse(r[col].ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out amt))
+            return "₹0.00";
+        return "₹" + Math.Abs(amt).ToString("N2", Ci);
     }
 }

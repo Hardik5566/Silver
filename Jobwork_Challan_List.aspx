@@ -89,9 +89,21 @@
         </div>
 
         <div class="inward-card shadow-sm">
+            <div class="px-3 pt-3 pb-0">
+                <div class="row mb-3">
+                    <div class="col-md-4 col-sm-6">
+                        <label class="form-label">Search</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" id="txt_jw_challan_search" class="form-control" placeholder="Date, challan no, jobwork party, part..." autocomplete="off" />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
                 <asp:GridView ID="grid_jobwork" runat="server" ClientIDMode="Static" CssClass="table inward-grid mb-0"
-                    AutoGenerateColumns="false" DataKeyNames="jobwork_challan_id" OnRowCommand="grid_jobwork_RowCommand" OnRowDataBound="grid_jobwork_RowDataBound"
+                    AutoGenerateColumns="false" DataKeyNames="jobwork_challan_id" UseAccessibleHeader="true"
+                    OnRowCommand="grid_jobwork_RowCommand" OnRowDataBound="grid_jobwork_RowDataBound"
                     EnableViewState="true" GridLines="None" ShowHeaderWhenEmpty="true">
                     <EmptyDataTemplate>
                         <div class="p-4 text-center text-muted">No jobwork challans with <strong>pending</strong> return quantity. Click <strong>New jobwork challan</strong> to add one.</div>
@@ -210,6 +222,19 @@
     </div>
 
     <script type="text/javascript">
+        function filterJwChallanGrid() {
+            var value = $("#txt_jw_challan_search").val().toLowerCase().trim();
+            $("#grid_jobwork tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
+        $(document).ready(function () {
+            $("#txt_jw_challan_search").on("keyup input", filterJwChallanGrid);
+            filterJwChallanGrid();
+        });
+
         function showRecvModal() {
             var el = document.getElementById('modal_recv');
             if (el && window.bootstrap) new bootstrap.Modal(el).show();

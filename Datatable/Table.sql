@@ -1,6 +1,6 @@
 ﻿/*
   Tables: Party → Jobwork party → Jobwork part (separate from Part master) → Jobwork challan (header + lines + return history)
-          → Unit → Part → User → Inward (header + lines + outward history) → Invoice
+          → Unit → Part → User → Inward (header + lines + outward history) → Invoice → Jobwork invoice → Staff expense → Account transaction (ledger)
   Run order: Function.sql → Table.sql → StoreProcedure.sql
 */
 
@@ -380,6 +380,118 @@ BEGIN
         amount DECIMAL(18, 2) NOT NULL,
         note NVARCHAR(500) NULL,
         payment_mode NVARCHAR(20) NOT NULL,
+        status BIT NOT NULL DEFAULT 1,
+        create_by INT NULL,
+        create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+        modify_by INT NULL,
+        modify_date DATETIME NULL,
+        delete_by INT NULL,
+        delete_date DATETIME NULL
+    );
+END
+GO
+
+/* --------------------- Account transaction (single-line ledger) --------------------- */
+
+IF OBJECT_ID('dbo.tbl_account_transaction', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tbl_account_transaction (
+        txn_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        txn_date DATE NOT NULL,
+        txn_type NVARCHAR(30) NOT NULL,
+        /* PARTY_INVOICE, PARTY_PAY, JW_INVOICE, JW_PAY, STAFF_EXPENSE, STAFF_PAY, OWNER_EXPENSE */
+        account_type NVARCHAR(20) NOT NULL,
+        /* PARTY, JOBWORK, STAFF, COMPANY_EXPENSE */
+        account_id BIGINT NULL,
+        /* party_id / jobwork_party_id / user_id; NULL for COMPANY_EXPENSE */
+        title NVARCHAR(100) NULL,
+        /* fixed expense title when account_type = COMPANY_EXPENSE */
+        dr_cr CHAR(1) NOT NULL,
+        /* D = Debit, C = Credit */
+        amount DECIMAL(18, 2) NOT NULL,
+        ref_no NVARCHAR(50) NULL,
+        note NVARCHAR(500) NULL,
+        payment_mode NVARCHAR(20) NULL,
+        source_type NVARCHAR(30) NULL,
+        /* INVOICE, MANUAL, etc. */
+        source_id BIGINT NULL,
+        /* e.g. invoice_id when source_type = INVOICE */
+        status BIT NOT NULL DEFAULT 1,
+        create_by INT NULL,
+        create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+        modify_by INT NULL,
+        modify_date DATETIME NULL,
+        delete_by INT NULL,
+        delete_date DATETIME NULL
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_account_txn_account' AND object_id = OBJECT_ID(N'dbo.tbl_account_transaction'))
+BEGIN
+    CREATE INDEX IX_account_txn_account
+        ON dbo.tbl_account_transaction (account_type, account_id, txn_date DESC)
+        WHERE status = 1;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_account_txn_source' AND object_id = OBJECT_ID(N'dbo.tbl_account_transaction'))
+BEGIN
+    CREATE INDEX IX_account_txn_source
+        ON dbo.tbl_account_transaction (source_type, source_id)
+        WHERE status = 1 AND source_id IS NOT NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_account_txn_date' AND object_id = OBJECT_ID(N'dbo.tbl_account_transaction'))
+BEGIN
+    CREATE INDEX IX_account_txn_date
+        ON dbo.tbl_account_transaction (txn_date DESC, txn_id DESC)
+        WHERE status = 1;
+END
+GO
+
+/* --------------------- Jobwork invoice (bill received from jobwork party) --------------------- */
+
+IF OBJECT_ID('dbo.tbl_jobwork_invoice', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tbl_jobwork_invoice (
+        jobwork_invoice_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        jobwork_party_id BIGINT NOT NULL,
+        invoice_date DATE NOT NULL,
+        invoice_no NVARCHAR(50) NULL,
+        total_amount DECIMAL(18, 2) NOT NULL,
+        status BIT NOT NULL DEFAULT 1,
+        create_by INT NULL,
+        create_date DATETIME NOT NULL DEFAULT dbo.get_date(),
+        modify_by INT NULL,
+        modify_date DATETIME NULL,
+        delete_by INT NULL,
+        delete_date DATETIME NULL,
+        CONSTRAINT CK_jobwork_invoice_amount CHECK (total_amount > 0)
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_jobwork_invoice_party_date' AND object_id = OBJECT_ID(N'dbo.tbl_jobwork_invoice'))
+BEGIN
+    CREATE INDEX IX_jobwork_invoice_party_date
+        ON dbo.tbl_jobwork_invoice (jobwork_party_id, invoice_date DESC)
+        WHERE status = 1;
+END
+GO
+
+/* --------------------- Staff expense (staff paid from own pocket) --------------------- */
+
+IF OBJECT_ID('dbo.tbl_staff_expense', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tbl_staff_expense (
+        staff_expense_id BIGINT IDENTITY(1, 1) NOT NULL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        expense_date DATE NOT NULL,
+        ref_no NVARCHAR(50) NULL,
+        note NVARCHAR(500) NULL,
+        amount DECIMAL(18, 2) NOT NULL,
         status BIT NOT NULL DEFAULT 1,
         create_by INT NULL,
         create_date DATETIME NOT NULL DEFAULT dbo.get_date(),

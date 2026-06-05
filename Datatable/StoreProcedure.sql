@@ -1,5 +1,5 @@
 /*
-  Stored procedures: Party, Jobwork party, Jobwork challan, Unit, Part, User, Inward/Outward, Invoice.
+  Stored procedures: Party, Jobwork party, Jobwork challan, Jobwork invoice, Staff expense, Account outstanding, Account ledger, Unit, Part, User, Inward/Outward, Invoice, Account transaction.
   Run after: Function.sql, Table.sql
 */
 
@@ -1538,7 +1538,31 @@ BEGIN
             WHERE status = 1 AND return_date >= @monthStart AND return_date < @monthEnd) AS jw_month_receive_moves,
         (SELECT ISNULL(SUM(CAST(rh.qty_perfect + rh.qty_reject AS BIGINT)), 0)
             FROM dbo.tbl_jobwork_return_history rh
-            WHERE rh.status = 1 AND rh.return_date >= @monthStart AND rh.return_date < @monthEnd) AS jw_month_receive_qty;
+            WHERE rh.status = 1 AND rh.return_date >= @monthStart AND rh.return_date < @monthEnd) AS jw_month_receive_qty,
+
+        /* Party: sum(debit - credit). Jobwork: sum(debit - credit) per account balance. */
+        (SELECT ISNULL(SUM(pb.balance), 0)
+            FROM (
+                SELECT
+                    SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END)
+                    - SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END) AS balance
+                FROM dbo.tbl_account_transaction AS t
+                INNER JOIN dbo.tbl_party_master AS p ON p.party_id = t.account_id
+                WHERE t.account_type = N'PARTY' AND t.status = 1
+                GROUP BY t.account_id
+            ) AS pb
+            WHERE pb.balance <> 0) AS total_debit,
+        (SELECT ISNULL(SUM(jb.balance), 0)
+            FROM (
+                SELECT
+                    SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END)
+                    - SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END) AS balance
+                FROM dbo.tbl_account_transaction AS t
+                INNER JOIN dbo.tbl_jobwork_party AS jp ON jp.jobwork_party_id = t.account_id
+                WHERE t.account_type = N'JOBWORK' AND t.status = 1
+                GROUP BY t.account_id
+            ) AS jb
+            WHERE jb.balance <> 0) AS total_credit;
 END
 GO
 
@@ -2629,6 +2653,17 @@ BEGIN
         SET sub_total = @sub, tax_total = @tax, grand_total = @grand, modify_by = @uid, modify_date = dbo.get_date()
         WHERE invoice_id = @invid;
 
+        INSERT INTO dbo.tbl_account_transaction (
+            txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
+            ref_no, note, payment_mode, source_type, source_id,
+            status, create_by, create_date
+        )
+        VALUES (
+            @d, N'PARTY_INVOICE', N'PARTY', @pid, NULL, N'D', @grand,
+            @invNo, @remarks, NULL, N'INVOICE', @invid,
+            1, @uid, dbo.get_date()
+        );
+
         COMMIT TRANSACTION;
         SELECT 'True' AS Success, N'Saved.' AS Message, @invid AS invoice_id, @invNo AS invoice_no;
     END TRY
@@ -2659,6 +2694,8 @@ BEGIN
         DECLARE @uid INT = CAST(@by AS INT);
         DECLARE @kind NVARCHAR(20) = UPPER(LTRIM(RTRIM(@invoice_kind)));
         DECLARE @invDate DATETIME = CAST(@invoice_date AS DATETIME);
+        DECLARE @d DATE = CAST(@invDate AS DATE);
+        DECLARE @invNo NVARCHAR(50);
 
         IF @kind NOT IN (N'GST', N'NON_GST')
         BEGIN
@@ -2677,6 +2714,8 @@ BEGIN
             SELECT 'False' AS Success, N'Party not found.' AS Message;
             RETURN;
         END
+
+        SELECT @invNo = invoice_no FROM dbo.tbl_invoice WHERE invoice_id = @invid;
 
         DECLARE @sub DECIMAL(18, 2) = 0;
         DECLARE @tax DECIMAL(18, 2) = 0;
@@ -2785,6 +2824,33 @@ BEGIN
         SET sub_total = @sub, tax_total = @tax, grand_total = @grand, modify_by = @uid, modify_date = dbo.get_date()
         WHERE invoice_id = @invid;
 
+        UPDATE dbo.tbl_account_transaction
+        SET
+            txn_date = @d,
+            account_id = @pid,
+            amount = @grand,
+            ref_no = @invNo,
+            note = @remarks,
+            modify_by = @uid,
+            modify_date = dbo.get_date()
+        WHERE source_type = N'INVOICE'
+          AND source_id = @invid
+          AND status = 1;
+
+        IF @@ROWCOUNT = 0
+        BEGIN
+            INSERT INTO dbo.tbl_account_transaction (
+                txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
+                ref_no, note, payment_mode, source_type, source_id,
+                status, create_by, create_date
+            )
+            VALUES (
+                @d, N'PARTY_INVOICE', N'PARTY', @pid, NULL, N'D', @grand,
+                @invNo, @remarks, NULL, N'INVOICE', @invid,
+                1, @uid, dbo.get_date()
+            );
+        END
+
         COMMIT TRANSACTION;
         SELECT 'True' AS Success, N'Updated.' AS Message, @invid AS invoice_id;
     END TRY
@@ -2821,9 +2887,615 @@ BEGIN
         SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
         WHERE invoice_id = @invid;
 
+        UPDATE dbo.tbl_account_transaction
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE source_type = N'INVOICE' AND source_id = @invid AND status = 1;
+
         SELECT 'True' AS Success, N'Deleted.' AS Message;
     END TRY
     BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+
+
+/* ==================== JOBWORK INVOICE ==================== */
+
+IF OBJECT_ID('dbo.dis_jobwork_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_jobwork_invoice_sp;
+GO
+CREATE PROCEDURE dbo.dis_jobwork_invoice_sp
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY j.invoice_date DESC, j.jobwork_invoice_id DESC) AS sr,
+        j.jobwork_invoice_id,
+        j.jobwork_party_id,
+        p.party_name,
+        j.invoice_date,
+        j.invoice_no,
+        j.total_amount
+    FROM dbo.tbl_jobwork_invoice AS j
+    INNER JOIN dbo.tbl_jobwork_party AS p
+        ON p.jobwork_party_id = j.jobwork_party_id AND p.status = 1
+    WHERE j.status = 1
+      AND j.invoice_date BETWEEN @f AND @t
+    ORDER BY j.invoice_date DESC, j.jobwork_invoice_id DESC;
+END
+GO
+
+IF OBJECT_ID('dbo.sel_jobwork_invoice_by_id_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_jobwork_invoice_by_id_sp;
+GO
+CREATE PROCEDURE dbo.sel_jobwork_invoice_by_id_sp
+    @jobwork_invoice_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @jid BIGINT = CAST(@jobwork_invoice_id AS BIGINT);
+
+    SELECT
+        jobwork_invoice_id,
+        jobwork_party_id,
+        invoice_date,
+        invoice_no,
+        total_amount
+    FROM dbo.tbl_jobwork_invoice
+    WHERE jobwork_invoice_id = @jid AND status = 1;
+END
+GO
+
+IF OBJECT_ID('dbo.ins_jobwork_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_jobwork_invoice_sp;
+GO
+CREATE PROCEDURE dbo.ins_jobwork_invoice_sp
+    @jobwork_party_id NVARCHAR(50),
+    @invoice_date NVARCHAR(50),
+    @invoice_no NVARCHAR(50) = NULL,
+    @total_amount NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @jpid BIGINT = CAST(@jobwork_party_id AS BIGINT);
+        DECLARE @d DATE = CAST(@invoice_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@total_amount AS DECIMAL(18, 2));
+        DECLARE @uid INT = CAST(@by AS INT);
+        DECLARE @invNo NVARCHAR(50) = NULLIF(LTRIM(RTRIM(@invoice_no)), N'');
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_party WHERE jobwork_party_id = @jpid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Jobwork party not found.' AS Message;
+            RETURN;
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        INSERT INTO dbo.tbl_jobwork_invoice (
+            jobwork_party_id, invoice_date, invoice_no, total_amount,
+            status, create_by, create_date
+        )
+        VALUES (@jpid, @d, @invNo, @amt, 1, @uid, dbo.get_date());
+
+        DECLARE @jid BIGINT = SCOPE_IDENTITY();
+
+        INSERT INTO dbo.tbl_account_transaction (
+            txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
+            ref_no, note, payment_mode, source_type, source_id,
+            status, create_by, create_date
+        )
+        VALUES (
+            @d, N'JW_INVOICE', N'JOBWORK', @jpid, NULL, N'C', @amt,
+            @invNo, NULL, NULL, N'JW_INVOICE', @jid,
+            1, @uid, dbo.get_date()
+        );
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Saved.' AS Message, @jid AS jobwork_invoice_id;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.upd_jobwork_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.upd_jobwork_invoice_sp;
+GO
+CREATE PROCEDURE dbo.upd_jobwork_invoice_sp
+    @jobwork_invoice_id NVARCHAR(50),
+    @jobwork_party_id NVARCHAR(50),
+    @invoice_date NVARCHAR(50),
+    @invoice_no NVARCHAR(50) = NULL,
+    @total_amount NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @jid BIGINT = CAST(@jobwork_invoice_id AS BIGINT);
+        DECLARE @jpid BIGINT = CAST(@jobwork_party_id AS BIGINT);
+        DECLARE @d DATE = CAST(@invoice_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@total_amount AS DECIMAL(18, 2));
+        DECLARE @uid INT = CAST(@by AS INT);
+        DECLARE @invNo NVARCHAR(50) = NULLIF(LTRIM(RTRIM(@invoice_no)), N'');
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_invoice WHERE jobwork_invoice_id = @jid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Jobwork invoice not found.' AS Message;
+            RETURN;
+        END
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_party WHERE jobwork_party_id = @jpid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Jobwork party not found.' AS Message;
+            RETURN;
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        UPDATE dbo.tbl_jobwork_invoice
+        SET
+            jobwork_party_id = @jpid,
+            invoice_date = @d,
+            invoice_no = @invNo,
+            total_amount = @amt,
+            modify_by = @uid,
+            modify_date = dbo.get_date()
+        WHERE jobwork_invoice_id = @jid AND status = 1;
+
+        UPDATE dbo.tbl_account_transaction
+        SET
+            txn_date = @d,
+            account_id = @jpid,
+            amount = @amt,
+            ref_no = @invNo,
+            modify_by = @uid,
+            modify_date = dbo.get_date()
+        WHERE source_type = N'JW_INVOICE'
+          AND source_id = @jid
+          AND status = 1;
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Updated.' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.dlt_jobwork_invoice_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_jobwork_invoice_sp;
+GO
+CREATE PROCEDURE dbo.dlt_jobwork_invoice_sp
+    @jobwork_invoice_id NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @jid BIGINT = CAST(@jobwork_invoice_id AS BIGINT);
+        DECLARE @uid INT = CAST(@by AS INT);
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_invoice WHERE jobwork_invoice_id = @jid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'Jobwork invoice not found.' AS Message;
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        UPDATE dbo.tbl_jobwork_invoice
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE jobwork_invoice_id = @jid;
+
+        UPDATE dbo.tbl_account_transaction
+        SET status = 0, delete_by = @uid, delete_date = dbo.get_date()
+        WHERE source_type = N'JW_INVOICE' AND source_id = @jid AND status = 1;
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Deleted.' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+/* ==================== STAFF EXPENSE (MY EXPENSE) ==================== */
+
+IF OBJECT_ID('dbo.dis_staff_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_staff_expense_sp;
+GO
+CREATE PROCEDURE dbo.dis_staff_expense_sp
+    @user_id NVARCHAR(50),
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY e.expense_date DESC, e.staff_expense_id DESC) AS sr,
+        e.staff_expense_id,
+        e.user_id,
+        e.expense_date,
+        e.ref_no,
+        e.note,
+        e.amount
+    FROM dbo.tbl_staff_expense AS e
+    WHERE e.status = 1
+      AND e.user_id = @uid
+      AND e.expense_date BETWEEN @f AND @t
+    ORDER BY e.expense_date DESC, e.staff_expense_id DESC;
+END
+GO
+
+IF OBJECT_ID('dbo.dis_my_staff_account_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_my_staff_account_sp;
+GO
+CREATE PROCEDURE dbo.dis_my_staff_account_sp
+    @user_id NVARCHAR(50),
+    @from_date NVARCHAR(50),
+    @to_date NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+    DECLARE @f DATE = CAST(@from_date AS DATE);
+    DECLARE @t DATE = CAST(@to_date AS DATE);
+    DECLARE @name NVARCHAR(150);
+    DECLARE @opening DECIMAL(18, 2) = 0;
+    DECLARE @periodDebit DECIMAL(18, 2) = 0;
+    DECLARE @periodCredit DECIMAL(18, 2) = 0;
+    DECLARE @closing DECIMAL(18, 2) = 0;
+
+    SELECT @name = u.full_name
+    FROM dbo.tbl_user_master AS u
+    WHERE u.user_id = @uid AND u.status = 1;
+
+    IF @name IS NULL
+    BEGIN
+        SELECT N'False' AS Success, N'User not found.' AS Message;
+        RETURN;
+    END
+
+    SELECT @opening = ISNULL(SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE -t.amount END), 0)
+    FROM dbo.tbl_account_transaction AS t
+    WHERE t.account_type = N'STAFF'
+      AND t.account_id = @uid
+      AND t.status = 1
+      AND t.txn_date < @f;
+
+    SELECT
+        @periodDebit = ISNULL(SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END), 0),
+        @periodCredit = ISNULL(SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END), 0)
+    FROM dbo.tbl_account_transaction AS t
+    WHERE t.account_type = N'STAFF'
+      AND t.account_id = @uid
+      AND t.status = 1
+      AND t.txn_date BETWEEN @f AND @t;
+
+    SELECT @closing = ISNULL(SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE -t.amount END), 0)
+    FROM dbo.tbl_account_transaction AS t
+    WHERE t.account_type = N'STAFF'
+      AND t.account_id = @uid
+      AND t.status = 1
+      AND t.txn_date <= @t;
+
+    SELECT
+        N'True' AS Success,
+        @uid AS user_id,
+        @name AS user_name,
+        N'Payable' AS balance_label,
+        @opening AS opening_balance,
+        @periodDebit AS period_debit,
+        @periodCredit AS period_credit,
+        @closing AS closing_balance;
+
+    ;WITH all_lines AS (
+        SELECT
+            t.txn_id,
+            t.txn_date,
+            t.txn_type,
+            CASE t.txn_type
+                WHEN N'STAFF_EXPENSE' THEN N'Staff expense'
+                WHEN N'STAFF_PAY' THEN N'Payment received'
+                ELSE t.txn_type
+            END AS txn_type_label,
+            t.ref_no,
+            t.note,
+            t.payment_mode,
+            CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END AS debit_amt,
+            CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END AS credit_amt,
+            CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE -t.amount END AS line_effect,
+            CASE WHEN t.txn_type = N'STAFF_EXPENSE' THEN t.source_id ELSE NULL END AS staff_expense_id,
+            CASE WHEN t.txn_type = N'STAFF_EXPENSE' THEN 1 ELSE 0 END AS can_edit
+        FROM dbo.tbl_account_transaction AS t
+        WHERE t.account_type = N'STAFF'
+          AND t.account_id = @uid
+          AND t.status = 1
+    ),
+    running AS (
+        SELECT
+            a.*,
+            SUM(a.line_effect) OVER (ORDER BY a.txn_date ASC, a.txn_id ASC ROWS UNBOUNDED PRECEDING) AS running_balance
+        FROM all_lines AS a
+    )
+    SELECT
+        x.sr,
+        x.is_opening,
+        x.txn_date,
+        x.txn_type,
+        x.txn_type_label,
+        x.ref_no,
+        x.note,
+        x.payment_mode,
+        x.debit_amt,
+        x.credit_amt,
+        x.running_balance,
+        x.staff_expense_id,
+        x.can_edit
+    FROM (
+        SELECT
+            0 AS sort_key,
+            0 AS txn_id,
+            0 AS sr,
+            1 AS is_opening,
+            @f AS txn_date,
+            N'OPENING' AS txn_type,
+            N'Opening balance' AS txn_type_label,
+            NULL AS ref_no,
+            NULL AS note,
+            NULL AS payment_mode,
+            CAST(0 AS DECIMAL(18, 2)) AS debit_amt,
+            CAST(0 AS DECIMAL(18, 2)) AS credit_amt,
+            @opening AS running_balance,
+            CAST(NULL AS BIGINT) AS staff_expense_id,
+            0 AS can_edit
+        UNION ALL
+        SELECT
+            1 AS sort_key,
+            r.txn_id,
+            ROW_NUMBER() OVER (ORDER BY r.txn_date ASC, r.txn_id ASC) AS sr,
+            0 AS is_opening,
+            r.txn_date,
+            r.txn_type,
+            r.txn_type_label,
+            r.ref_no,
+            r.note,
+            r.payment_mode,
+            r.debit_amt,
+            r.credit_amt,
+            r.running_balance,
+            r.staff_expense_id,
+            r.can_edit
+        FROM running AS r
+        WHERE r.txn_date BETWEEN @f AND @t
+    ) AS x
+    ORDER BY x.sort_key ASC, x.txn_date ASC, x.txn_id ASC;
+END
+GO
+
+IF OBJECT_ID('dbo.sel_staff_expense_by_id_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_staff_expense_by_id_sp;
+GO
+CREATE PROCEDURE dbo.sel_staff_expense_by_id_sp
+    @staff_expense_id NVARCHAR(50),
+    @user_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @eid BIGINT = CAST(@staff_expense_id AS BIGINT);
+    DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+
+    SELECT
+        staff_expense_id,
+        user_id,
+        expense_date,
+        ref_no,
+        note,
+        amount
+    FROM dbo.tbl_staff_expense
+    WHERE staff_expense_id = @eid
+      AND user_id = @uid
+      AND status = 1;
+END
+GO
+
+IF OBJECT_ID('dbo.ins_staff_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_staff_expense_sp;
+GO
+CREATE PROCEDURE dbo.ins_staff_expense_sp
+    @user_id NVARCHAR(50),
+    @expense_date NVARCHAR(50),
+    @ref_no NVARCHAR(50) = NULL,
+    @note NVARCHAR(500) = NULL,
+    @amount NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+        DECLARE @d DATE = CAST(@expense_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@amount AS DECIMAL(18, 2));
+        DECLARE @byUid INT = CAST(@by AS INT);
+        DECLARE @ref NVARCHAR(50) = NULLIF(LTRIM(RTRIM(@ref_no)), N'');
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.tbl_user_master WHERE user_id = @uid AND status = 1)
+        BEGIN
+            SELECT 'False' AS Success, N'User not found.' AS Message;
+            RETURN;
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        INSERT INTO dbo.tbl_staff_expense (
+            user_id, expense_date, ref_no, note, amount,
+            status, create_by, create_date
+        )
+        VALUES (
+            @uid, @d, @ref, NULLIF(LTRIM(RTRIM(@note)), N''), @amt,
+            1, @byUid, dbo.get_date()
+        );
+
+        DECLARE @eid BIGINT = SCOPE_IDENTITY();
+
+        INSERT INTO dbo.tbl_account_transaction (
+            txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
+            ref_no, note, payment_mode, source_type, source_id,
+            status, create_by, create_date
+        )
+        VALUES (
+            @d, N'STAFF_EXPENSE', N'STAFF', @uid, NULL, N'C', @amt,
+            @ref, NULLIF(LTRIM(RTRIM(@note)), N''), NULL, N'STAFF_EXPENSE', @eid,
+            1, @byUid, dbo.get_date()
+        );
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Saved.' AS Message, @eid AS staff_expense_id;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.upd_staff_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.upd_staff_expense_sp;
+GO
+CREATE PROCEDURE dbo.upd_staff_expense_sp
+    @staff_expense_id NVARCHAR(50),
+    @user_id NVARCHAR(50),
+    @expense_date NVARCHAR(50),
+    @ref_no NVARCHAR(50) = NULL,
+    @note NVARCHAR(500) = NULL,
+    @amount NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @eid BIGINT = CAST(@staff_expense_id AS BIGINT);
+        DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+        DECLARE @d DATE = CAST(@expense_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@amount AS DECIMAL(18, 2));
+        DECLARE @byUid INT = CAST(@by AS INT);
+        DECLARE @ref NVARCHAR(50) = NULLIF(LTRIM(RTRIM(@ref_no)), N'');
+
+        IF NOT EXISTS (
+            SELECT 1 FROM dbo.tbl_staff_expense
+            WHERE staff_expense_id = @eid AND user_id = @uid AND status = 1
+        )
+        BEGIN
+            SELECT 'False' AS Success, N'Expense not found.' AS Message;
+            RETURN;
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        UPDATE dbo.tbl_staff_expense
+        SET
+            expense_date = @d,
+            ref_no = @ref,
+            note = NULLIF(LTRIM(RTRIM(@note)), N''),
+            amount = @amt,
+            modify_by = @byUid,
+            modify_date = dbo.get_date()
+        WHERE staff_expense_id = @eid AND user_id = @uid AND status = 1;
+
+        UPDATE dbo.tbl_account_transaction
+        SET
+            txn_date = @d,
+            amount = @amt,
+            ref_no = @ref,
+            note = NULLIF(LTRIM(RTRIM(@note)), N''),
+            modify_by = @byUid,
+            modify_date = dbo.get_date()
+        WHERE source_type = N'STAFF_EXPENSE'
+          AND source_id = @eid
+          AND status = 1;
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Updated.' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.dlt_staff_expense_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dlt_staff_expense_sp;
+GO
+CREATE PROCEDURE dbo.dlt_staff_expense_sp
+    @staff_expense_id NVARCHAR(50),
+    @user_id NVARCHAR(50),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @eid BIGINT = CAST(@staff_expense_id AS BIGINT);
+        DECLARE @uid BIGINT = CAST(@user_id AS BIGINT);
+        DECLARE @byUid INT = CAST(@by AS INT);
+
+        IF NOT EXISTS (
+            SELECT 1 FROM dbo.tbl_staff_expense
+            WHERE staff_expense_id = @eid AND user_id = @uid AND status = 1
+        )
+        BEGIN
+            SELECT 'False' AS Success, N'Expense not found.' AS Message;
+            RETURN;
+        END
+
+        BEGIN TRANSACTION;
+
+        UPDATE dbo.tbl_staff_expense
+        SET status = 0, delete_by = @byUid, delete_date = dbo.get_date()
+        WHERE staff_expense_id = @eid AND user_id = @uid;
+
+        UPDATE dbo.tbl_account_transaction
+        SET status = 0, delete_by = @byUid, delete_date = dbo.get_date()
+        WHERE source_type = N'STAFF_EXPENSE' AND source_id = @eid AND status = 1;
+
+        COMMIT TRANSACTION;
+        SELECT 'True' AS Success, N'Deleted.' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
     END CATCH
 END
@@ -3001,12 +3673,321 @@ BEGIN
             SELECT 'False' AS Success, N'Expense not found.' AS Message;
             RETURN;
         END
-
+		
         UPDATE dbo.tbl_expense
         SET status = 0, delete_by = @byUid, delete_date = dbo.get_date()
         WHERE expense_id = @eid;
 
         SELECT 'True' AS Success, N'Deleted.' AS Message;
+    END TRY
+    BEGIN CATCH
+        SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
+    END CATCH
+END
+GO
+
+/* ==================== ACCOUNT OUTSTANDING ==================== */
+
+IF OBJECT_ID('dbo.dis_account_outstanding_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_account_outstanding_sp;
+GO
+CREATE PROCEDURE dbo.dis_account_outstanding_sp
+    @account_type NVARCHAR(20) = NULL,
+    @search NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @type NVARCHAR(20) = UPPER(NULLIF(LTRIM(RTRIM(ISNULL(@account_type, N''))), N''));
+    DECLARE @q NVARCHAR(100) = NULLIF(LTRIM(RTRIM(ISNULL(@search, N''))), N'');
+
+    IF @type = N'ALL'
+        SET @type = NULL;
+
+    ;WITH balances AS (
+        SELECT
+            N'PARTY' AS account_type,
+            N'Party' AS account_type_label,
+            t.account_id,
+            p.party_name AS account_name,
+            SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END) AS debit_total,
+            SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END) AS credit_total,
+            SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE -t.amount END) AS balance,
+            N'Receivable' AS balance_label
+        FROM dbo.tbl_account_transaction AS t
+        INNER JOIN dbo.tbl_party_master AS p ON p.party_id = t.account_id
+        WHERE t.account_type = N'PARTY' AND t.status = 1
+        GROUP BY t.account_id, p.party_name
+
+        UNION ALL
+
+        SELECT
+            N'JOBWORK',
+            N'Jobwork',
+            t.account_id,
+            jp.party_name,
+            SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END),
+            SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END),
+            SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE -t.amount END),
+            N'Payable'
+        FROM dbo.tbl_account_transaction AS t
+        INNER JOIN dbo.tbl_jobwork_party AS jp ON jp.jobwork_party_id = t.account_id
+        WHERE t.account_type = N'JOBWORK' AND t.status = 1
+        GROUP BY t.account_id, jp.party_name
+
+        UNION ALL
+
+        SELECT
+            N'STAFF',
+            N'Staff',
+            t.account_id,
+            u.full_name,
+            SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END),
+            SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END),
+            SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE -t.amount END),
+            N'Payable'
+        FROM dbo.tbl_account_transaction AS t
+        INNER JOIN dbo.tbl_user_master AS u ON u.user_id = t.account_id
+        WHERE t.account_type = N'STAFF' AND t.status = 1
+        GROUP BY t.account_id, u.full_name
+    )
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY b.account_type, b.account_name) AS sr,
+        b.account_type,
+        b.account_type_label,
+        b.account_id,
+        b.account_name,
+        b.debit_total,
+        b.credit_total,
+        b.balance,
+        CASE
+            WHEN b.account_type = N'STAFF' THEN
+                CASE WHEN b.balance >= 0 THEN N'Payable' ELSE N'Receivable' END
+            ELSE
+                CASE WHEN b.balance >= 0 THEN N'Receivable' ELSE N'Payable' END
+        END AS balance_label
+    FROM balances AS b
+    WHERE (@type IS NULL OR b.account_type = @type)
+      AND (@q IS NULL OR b.account_name LIKE N'%' + @q + N'%')
+      AND b.balance <> 0
+    ORDER BY b.account_type, b.account_name;
+END
+GO
+
+IF OBJECT_ID('dbo.dis_account_ledger_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.dis_account_ledger_sp;
+GO
+CREATE PROCEDURE dbo.dis_account_ledger_sp
+    @account_type NVARCHAR(20),
+    @account_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @type NVARCHAR(20) = UPPER(LTRIM(RTRIM(ISNULL(@account_type, N''))));
+    DECLARE @aid BIGINT = CAST(@account_id AS BIGINT);
+    DECLARE @name NVARCHAR(150);
+    DECLARE @typeLabel NVARCHAR(20);
+    DECLARE @balLabel NVARCHAR(20);
+    DECLARE @periodDebit DECIMAL(18, 2) = 0;
+    DECLARE @periodCredit DECIMAL(18, 2) = 0;
+    DECLARE @closing DECIMAL(18, 2) = 0;
+
+    IF @type NOT IN (N'PARTY', N'JOBWORK', N'STAFF')
+    BEGIN
+        SELECT N'False' AS Success, N'account_type must be PARTY, JOBWORK or STAFF.' AS Message;
+        RETURN;
+    END
+
+    IF @type = N'PARTY'
+    BEGIN
+        SET @typeLabel = N'Party';
+        SELECT @name = p.party_name
+        FROM dbo.tbl_party_master AS p
+        WHERE p.party_id = @aid AND p.status = 1;
+    END
+    ELSE IF @type = N'JOBWORK'
+    BEGIN
+        SET @typeLabel = N'Jobwork';
+        SELECT @name = jp.party_name
+        FROM dbo.tbl_jobwork_party AS jp
+        WHERE jp.jobwork_party_id = @aid AND jp.status = 1;
+    END
+    ELSE
+    BEGIN
+        SET @typeLabel = N'Staff';
+        SELECT @name = u.full_name
+        FROM dbo.tbl_user_master AS u
+        WHERE u.user_id = @aid AND u.status = 1;
+    END
+
+    IF @name IS NULL
+    BEGIN
+        SELECT N'False' AS Success, N'Account not found.' AS Message;
+        RETURN;
+    END
+
+    SELECT
+        @periodDebit = ISNULL(SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END), 0),
+        @periodCredit = ISNULL(SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END), 0)
+    FROM dbo.tbl_account_transaction AS t
+    WHERE t.account_type = @type AND t.account_id = @aid AND t.status = 1;
+
+    IF @type = N'PARTY'
+        SELECT @closing = ISNULL(SUM(CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE -t.amount END), 0)
+        FROM dbo.tbl_account_transaction AS t
+        WHERE t.account_type = @type AND t.account_id = @aid AND t.status = 1;
+    ELSE
+        SELECT @closing = ISNULL(SUM(CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE -t.amount END), 0)
+        FROM dbo.tbl_account_transaction AS t
+        WHERE t.account_type = @type AND t.account_id = @aid AND t.status = 1;
+
+    IF @type = N'PARTY'
+        SET @balLabel = CASE WHEN @closing >= 0 THEN N'Receivable' ELSE N'Payable' END;
+    ELSE
+        SET @balLabel = CASE WHEN @closing >= 0 THEN N'Payable' ELSE N'Receivable' END;
+
+    SELECT
+        N'True' AS Success,
+        @type AS account_type,
+        @typeLabel AS account_type_label,
+        @aid AS account_id,
+        @name AS account_name,
+        @balLabel AS balance_label,
+        @periodDebit AS period_debit,
+        @periodCredit AS period_credit,
+        @closing AS closing_balance;
+
+    ;WITH lines AS (
+        SELECT
+            t.txn_id,
+            t.txn_date,
+            t.txn_type,
+            CASE t.txn_type
+                WHEN N'PARTY_INVOICE' THEN N'Party invoice'
+                WHEN N'PARTY_PAY' THEN N'Party payment'
+                WHEN N'JW_INVOICE' THEN N'Jobwork invoice'
+                WHEN N'JW_PAY' THEN N'Jobwork payment'
+                WHEN N'STAFF_EXPENSE' THEN N'Staff expense'
+                WHEN N'STAFF_PAY' THEN N'Staff payment'
+                WHEN N'OWNER_EXPENSE' THEN N'Owner expense'
+                ELSE t.txn_type
+            END AS txn_type_label,
+            t.ref_no,
+            t.note,
+            CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE 0 END AS debit_amt,
+            CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE 0 END AS credit_amt,
+            CASE
+                WHEN @type = N'PARTY' THEN CASE WHEN t.dr_cr = N'D' THEN t.amount ELSE -t.amount END
+                ELSE CASE WHEN t.dr_cr = N'C' THEN t.amount ELSE -t.amount END
+            END AS line_effect
+        FROM dbo.tbl_account_transaction AS t
+        WHERE t.account_type = @type
+          AND t.account_id = @aid
+          AND t.status = 1
+    )
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY l.txn_date ASC, l.txn_id ASC) AS sr,
+        l.txn_date,
+        l.txn_type,
+        l.txn_type_label,
+        l.ref_no,
+        l.note,
+        l.debit_amt,
+        l.credit_amt,
+        SUM(l.line_effect) OVER (ORDER BY l.txn_date ASC, l.txn_id ASC ROWS UNBOUNDED PRECEDING) AS running_balance
+    FROM lines AS l
+    ORDER BY l.txn_date ASC, l.txn_id ASC;
+END
+GO
+
+IF OBJECT_ID('dbo.ins_ledger_payment_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_ledger_payment_sp;
+GO
+CREATE PROCEDURE dbo.ins_ledger_payment_sp
+    @account_type NVARCHAR(20),
+    @account_id NVARCHAR(50),
+    @payment_date NVARCHAR(50),
+    @ref_no NVARCHAR(50) = NULL,
+    @note NVARCHAR(500) = NULL,
+    @amount NVARCHAR(50),
+    @payment_mode NVARCHAR(20),
+    @by NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    BEGIN TRY
+        DECLARE @type NVARCHAR(20) = UPPER(LTRIM(RTRIM(ISNULL(@account_type, N''))));
+        DECLARE @aid BIGINT = CAST(@account_id AS BIGINT);
+        DECLARE @d DATE = CAST(@payment_date AS DATE);
+        DECLARE @amt DECIMAL(18, 2) = CAST(@amount AS DECIMAL(18, 2));
+        DECLARE @uid INT = CAST(@by AS INT);
+        DECLARE @ref NVARCHAR(50) = NULLIF(LTRIM(RTRIM(@ref_no)), N'');
+        DECLARE @pm NVARCHAR(20) = UPPER(LTRIM(RTRIM(ISNULL(@payment_mode, N''))));
+        DECLARE @txnType NVARCHAR(30);
+        DECLARE @drCr CHAR(1);
+        DECLARE @pmOut NVARCHAR(20);
+
+        IF @type NOT IN (N'PARTY', N'JOBWORK', N'STAFF')
+        BEGIN
+            SELECT 'False' AS Success, N'account_type must be PARTY, JOBWORK or STAFF.' AS Message;
+            RETURN;
+        END
+
+        IF @type = N'PARTY'
+        BEGIN
+            SET @txnType = N'PARTY_PAY';
+            SET @drCr = N'C';
+            IF NOT EXISTS (SELECT 1 FROM dbo.tbl_party_master WHERE party_id = @aid AND status = 1)
+            BEGIN
+                SELECT 'False' AS Success, N'Party not found.' AS Message;
+                RETURN;
+            END
+        END
+        ELSE IF @type = N'JOBWORK'
+        BEGIN
+            SET @txnType = N'JW_PAY';
+            SET @drCr = N'D';
+            IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_party WHERE jobwork_party_id = @aid AND status = 1)
+            BEGIN
+                SELECT 'False' AS Success, N'Jobwork party not found.' AS Message;
+                RETURN;
+            END
+        END
+        ELSE
+        BEGIN
+            SET @txnType = N'STAFF_PAY';
+            SET @drCr = N'D';
+            IF NOT EXISTS (SELECT 1 FROM dbo.tbl_user_master WHERE user_id = @aid AND status = 1)
+            BEGIN
+                SELECT 'False' AS Success, N'Staff not found.' AS Message;
+                RETURN;
+            END
+        END
+
+        IF @amt <= 0
+        BEGIN
+            SELECT 'False' AS Success, N'Amount must be greater than zero.' AS Message;
+            RETURN;
+        END
+
+        IF @pm NOT IN (N'CASH', N'ONLINE')
+        BEGIN
+            SELECT 'False' AS Success, N'Payment mode must be Cash or Online.' AS Message;
+            RETURN;
+        END
+
+        SET @pmOut = CASE WHEN @pm = N'CASH' THEN N'Cash' ELSE N'Online' END;
+
+        INSERT INTO dbo.tbl_account_transaction (
+            txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
+            ref_no, note, payment_mode, source_type, source_id,
+            status, create_by, create_date
+        )
+        VALUES (
+            @d, @txnType, @type, @aid, NULL, @drCr, @amt,
+            @ref, NULLIF(LTRIM(RTRIM(@note)), N''), @pmOut, N'MANUAL', NULL,
+            1, @uid, dbo.get_date()
+        );
+
+        SELECT 'True' AS Success, N'Payment saved.' AS Message, CAST(SCOPE_IDENTITY() AS BIGINT) AS txn_id;
     END TRY
     BEGIN CATCH
         SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;

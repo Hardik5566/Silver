@@ -32,8 +32,17 @@
 
     <div class="card">
         <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-4 col-sm-6">
+                    <label class="form-label">Search</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="txt_part_search" class="form-control" placeholder="Party, part name, unit, rate, tax..." autocomplete="off" />
+                    </div>
+                </div>
+            </div>
             <div class="table-responsive">
-                <asp:GridView ID="grid_part" ClientIDMode="Static" CssClass="table tbl_bottem_boder align-middle mb-0" runat="server" AutoGenerateColumns="false" OnRowCommand="grid_part_RowCommand">
+                <asp:GridView ID="grid_part" ClientIDMode="Static" CssClass="table tbl_bottem_boder align-middle mb-0" runat="server" AutoGenerateColumns="false" UseAccessibleHeader="true" OnRowCommand="grid_part_RowCommand">
                     <Columns>
                         <asp:TemplateField HeaderText="Sr" ItemStyle-Width="50px">
                             <ItemTemplate><%# Container.DataItemIndex+1 %></ItemTemplate>
@@ -120,7 +129,18 @@
             return isValid;
         }
 
+        function filterPartGrid() {
+            var value = $("#txt_part_search").val().toLowerCase().trim();
+            $("#grid_part tr:has(td)").each(function () {
+                var text = $(this).text().toLowerCase();
+                $(this).toggle(value === "" || text.indexOf(value) > -1);
+            });
+        }
+
         $(document).ready(function () {
+            $("#txt_part_search").on("keyup input", filterPartGrid);
+            filterPartGrid();
+
             $(".btn_add").click(function () {
                 $("#<%=hd_action.ClientID%>").val("save");
                 $("#<%=txt_part_name.ClientID%>, #<%=txt_rate.ClientID%>, #<%=txt_tax_per.ClientID%>").val("");

@@ -138,6 +138,8 @@
         .dash-top-card--pink::before { background: linear-gradient(90deg, #f472b6, var(--dash-pink)); }
         .dash-top-card--blue::before { background: linear-gradient(90deg, #60a5fa, var(--dash-blue)); }
         .dash-top-card--teal::before { background: linear-gradient(90deg, #2dd4bf, var(--dash-teal)); }
+        .dash-top-card--amber::before { background: linear-gradient(90deg, #fbbf24, var(--dash-amber)); }
+        .dash-top-card--rose::before { background: linear-gradient(90deg, #fb7185, #e11d48); }
 
         .dash-top-card__label {
             font-size: 0.8rem;
@@ -155,6 +157,7 @@
 
         @media (min-width: 1024px) {
             .dash-top-card { grid-column: span 3; }
+            .dash-top-card.dash-span-6 { grid-column: span 6; }
         }
 
         .dash-glass {
@@ -308,6 +311,20 @@
             <a href="Jobwork_Part_Master.aspx" class="dash-top-card dash-top-card--teal">
                 <span class="dash-top-card__label">Jobwork part</span>
                 <span class="dash-top-card__value"><asp:Literal ID="lit_count_jobwork_part" runat="server">0</asp:Literal></span>
+            </a>
+
+            <div class="dash-masters-heading">
+                <p class="dash-premium__eyebrow">Accounts</p>
+                <h2 class="dash-masters-heading__title">Ledger summary</h2>
+            </div>
+
+            <a href="Account_Outstanding.aspx?account_type=PARTY" class="dash-top-card dash-top-card--amber dash-span-6">
+                <span class="dash-top-card__label">Total debit money (party)</span>
+                <span class="dash-top-card__value"><asp:Literal ID="lit_total_debit" runat="server">₹0.00</asp:Literal></span>
+            </a>
+            <a href="Account_Outstanding.aspx?account_type=JOBWORK" class="dash-top-card dash-top-card--rose dash-span-6">
+                <span class="dash-top-card__label">Total credit money (jobwork)</span>
+                <span class="dash-top-card__value"><asp:Literal ID="lit_total_credit" runat="server">₹0.00</asp:Literal></span>
             </a>
 
             <%-- Row 2: two parent cards side by side --%>
