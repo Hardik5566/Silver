@@ -3981,10 +3981,14 @@ BEGIN
             CASE t.txn_type
                 WHEN N'PARTY_INVOICE' THEN N'Party invoice'
                 WHEN N'PARTY_PAY' THEN N'Party payment'
+                WHEN N'PARTY_ADJUST' THEN N'Party due / adjustment'
                 WHEN N'JW_INVOICE' THEN N'Jobwork invoice'
                 WHEN N'JW_PAY' THEN N'Jobwork payment'
+                WHEN N'JW_ADJUST' THEN N'Jobwork due / adjustment'
                 WHEN N'STAFF_EXPENSE' THEN N'Staff expense'
                 WHEN N'STAFF_PAY' THEN N'Staff payment'
+                WHEN N'STAFF_ADJUST' THEN N'Staff due / adjustment'
+                WHEN N'OPENING' THEN N'Previous due / opening'
                 WHEN N'OWNER_EXPENSE' THEN N'Owner expense'
                 ELSE t.txn_type
             END AS txn_type_label,
@@ -4018,14 +4022,15 @@ GO
 
 IF OBJECT_ID('dbo.ins_ledger_payment_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.ins_ledger_payment_sp;
 GO
-CREATE PROCEDURE dbo.ins_ledger_payment_sp
+alter PROCEDURE dbo.ins_ledger_payment_sp
     @account_type NVARCHAR(20),
     @account_id NVARCHAR(50),
     @payment_date NVARCHAR(50),
     @ref_no NVARCHAR(50) = NULL,
     @note NVARCHAR(500) = NULL,
     @amount NVARCHAR(50),
-    @payment_mode NVARCHAR(20),
+    @payment_mode NVARCHAR(20) = NULL,
+    @dr_cr NVARCHAR(1) = NULL,
     @by NVARCHAR(50)
 AS
 BEGIN
@@ -4038,9 +4043,11 @@ BEGIN
         DECLARE @uid INT = CAST(@by AS INT);
         DECLARE @ref NVARCHAR(50) = NULLIF(LTRIM(RTRIM(@ref_no)), N'');
         DECLARE @pm NVARCHAR(20) = UPPER(LTRIM(RTRIM(ISNULL(@payment_mode, N''))));
+        DECLARE @drCrIn NVARCHAR(1) = UPPER(LTRIM(RTRIM(ISNULL(@dr_cr, N''))));
         DECLARE @txnType NVARCHAR(30);
         DECLARE @drCr CHAR(1);
-        DECLARE @pmOut NVARCHAR(20);
+        DECLARE @pmOut NVARCHAR(20) = NULL;
+        DECLARE @isPayment BIT = 0;
 
         IF @type NOT IN (N'PARTY', N'JOBWORK', N'STAFF')
         BEGIN
@@ -4050,8 +4057,10 @@ BEGIN
 
         IF @type = N'PARTY'
         BEGIN
-            SET @txnType = N'PARTY_PAY';
             SET @drCr = N'C';
+            IF @drCrIn IN (N'D', N'C') SET @drCr = @drCrIn;
+            SET @txnType = CASE WHEN @drCr = N'D' THEN N'PARTY_ADJUST' ELSE N'PARTY_PAY' END;
+            SET @isPayment = CASE WHEN @drCr = N'C' THEN 1 ELSE 0 END;
             IF NOT EXISTS (SELECT 1 FROM dbo.tbl_party_master WHERE party_id = @aid AND status = 1)
             BEGIN
                 SELECT 'False' AS Success, N'Party not found.' AS Message;
@@ -4060,8 +4069,10 @@ BEGIN
         END
         ELSE IF @type = N'JOBWORK'
         BEGIN
-            SET @txnType = N'JW_PAY';
             SET @drCr = N'D';
+            IF @drCrIn IN (N'D', N'C') SET @drCr = @drCrIn;
+            SET @txnType = CASE WHEN @drCr = N'D' THEN N'JW_PAY' ELSE N'JW_ADJUST' END;
+            SET @isPayment = CASE WHEN @drCr = N'D' THEN 1 ELSE 0 END;
             IF NOT EXISTS (SELECT 1 FROM dbo.tbl_jobwork_party WHERE jobwork_party_id = @aid AND status = 1)
             BEGIN
                 SELECT 'False' AS Success, N'Jobwork party not found.' AS Message;
@@ -4070,8 +4081,10 @@ BEGIN
         END
         ELSE
         BEGIN
-            SET @txnType = N'STAFF_PAY';
             SET @drCr = N'D';
+            IF @drCrIn IN (N'D', N'C') SET @drCr = @drCrIn;
+            SET @txnType = CASE WHEN @drCr = N'D' THEN N'STAFF_PAY' ELSE N'STAFF_ADJUST' END;
+            SET @isPayment = CASE WHEN @drCr = N'D' THEN 1 ELSE 0 END;
             IF NOT EXISTS (SELECT 1 FROM dbo.tbl_user_master WHERE user_id = @aid AND status = 1)
             BEGIN
                 SELECT 'False' AS Success, N'Staff not found.' AS Message;
@@ -4085,13 +4098,15 @@ BEGIN
             RETURN;
         END
 
-        IF @pm NOT IN (N'CASH', N'ONLINE')
+        IF @isPayment = 1
         BEGIN
-            SELECT 'False' AS Success, N'Payment mode must be Cash or Online.' AS Message;
-            RETURN;
+            IF @pm NOT IN (N'CASH', N'ONLINE')
+            BEGIN
+                SELECT 'False' AS Success, N'Payment mode must be Cash or Online.' AS Message;
+                RETURN;
+            END
+            SET @pmOut = CASE WHEN @pm = N'CASH' THEN N'Cash' ELSE N'Online' END;
         END
-
-        SET @pmOut = CASE WHEN @pm = N'CASH' THEN N'Cash' ELSE N'Online' END;
 
         INSERT INTO dbo.tbl_account_transaction (
             txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
@@ -4104,7 +4119,7 @@ BEGIN
             1, @uid, dbo.get_date()
         );
 
-        SELECT 'True' AS Success, N'Payment saved.' AS Message, CAST(SCOPE_IDENTITY() AS BIGINT) AS txn_id;
+        SELECT 'True' AS Success, N'Ledger entry saved.' AS Message, CAST(SCOPE_IDENTITY() AS BIGINT) AS txn_id;
     END TRY
     BEGIN CATCH
         SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;

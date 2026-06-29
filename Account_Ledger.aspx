@@ -100,7 +100,7 @@
             <div class="aled-summary-head">
                 <asp:Label ID="lbl_account_title" runat="server" CssClass="aled-account-title mb-0" />
                 <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal_payment" onclick="resetPaymentModal();">
-                    + <asp:Label ID="lbl_add_payment_btn" runat="server" Text="Add payment" />
+                    + <asp:Label ID="lbl_add_payment_btn" runat="server" Text="Add entry" />
                 </button>
             </div>
             <div class="aled-summary">
@@ -164,13 +164,27 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title mb-0"><asp:Label ID="lbl_payment_modal_title" runat="server" Text="Add payment" /></h5>
+                    <h5 class="modal-title mb-0"><asp:Label ID="lbl_payment_modal_title" runat="server" Text="Add ledger entry" /></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
+                    <asp:HiddenField ID="hf_default_dr" runat="server" Value="C" />
                     <div class="row g-3">
                         <div class="col-12">
-                            <label class="form-label">Payment date</label>
+                            <label class="form-label d-block">Entry type</label>
+                            <div class="d-flex flex-wrap gap-4 mt-1">
+                                <div class="form-check m-0 d-flex align-items-center">
+                                    <asp:RadioButton ID="rb_entry_debit" runat="server" GroupName="led_entry_dir" CssClass="form-check-input" />
+                                    <asp:Label ID="lbl_dir_debit" runat="server" AssociatedControlID="rb_entry_debit" CssClass="form-check-label ms-1 mb-0">Debit</asp:Label>
+                                </div>
+                                <div class="form-check m-0 d-flex align-items-center">
+                                    <asp:RadioButton ID="rb_entry_credit" runat="server" GroupName="led_entry_dir" CssClass="form-check-input" />
+                                    <asp:Label ID="lbl_dir_credit" runat="server" AssociatedControlID="rb_entry_credit" CssClass="form-check-label ms-1 mb-0">Credit</asp:Label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Date</label>
                             <asp:TextBox ID="txt_pay_date" runat="server" CssClass="form-control" TextMode="Date"></asp:TextBox>
                         </div>
                         <div class="col-12">
@@ -182,7 +196,7 @@
                             <asp:TextBox ID="txt_pay_amount" runat="server" CssClass="form-control"></asp:TextBox>
                         </div>
                         <div class="col-12">
-                            <label class="form-label d-block">Payment mode</label>
+                            <label class="form-label d-block">Payment mode <asp:Label ID="lbl_pay_mode_hint" runat="server" CssClass="text-muted fw-normal" Text="(for payments only)" /></label>
                             <div class="d-flex flex-wrap gap-4 mt-1">
                                 <div class="form-check m-0 d-flex align-items-center">
                                     <asp:RadioButton ID="rb_pay_cash" runat="server" GroupName="led_pay_mode" CssClass="form-check-input" />
@@ -223,6 +237,12 @@
             var ro = document.getElementById('<%= rb_pay_online.ClientID %>');
             if (rc) rc.checked = false;
             if (ro) ro.checked = false;
+            var def = document.getElementById('<%= hf_default_dr.ClientID %>');
+            var isDebit = def && def.value === 'D';
+            var rd = document.getElementById('<%= rb_entry_debit.ClientID %>');
+            var rcr = document.getElementById('<%= rb_entry_credit.ClientID %>');
+            if (rd) rd.checked = isDebit;
+            if (rcr) rcr.checked = !isDebit;
         }
     </script>
 </asp:Content>

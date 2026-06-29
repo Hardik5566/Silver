@@ -22,7 +22,7 @@ public class BAL_Account
     }
 
     public static DataSet ins_ledger_payment(string account_type, string account_id, string payment_date,
-        string ref_no, string note, string amount, string payment_mode, string by)
+        string ref_no, string note, string amount, string payment_mode, string dr_cr, string by)
     {
         SqlCommand cmd = new SqlCommand { CommandText = "ins_ledger_payment_sp" };
         parameter p = new parameter();
@@ -33,6 +33,7 @@ public class BAL_Account
         cmd.Parameters.Add(p.stringparam("@note", note ?? ""));
         cmd.Parameters.Add(p.stringparam("@amount", amount));
         cmd.Parameters.Add(p.stringparam("@payment_mode", payment_mode ?? ""));
+        cmd.Parameters.Add(p.stringparam("@dr_cr", dr_cr ?? ""));
         cmd.Parameters.Add(p.stringparam("@by", by));
         return command.ExtQueryDS(cmd);
     }

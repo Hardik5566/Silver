@@ -200,7 +200,7 @@ public partial class Account_Ledger : Page
         lbl_balance.CssClass = GetBalanceCssClass(balance, _accountType);
         lbl_balance_hint.Text = balLabel;
         pnl_summary.Visible = true;
-        SetPaymentLabels(ddl_account_type.SelectedValue);
+        SetEntryLabels(ddl_account_type.SelectedValue);
         if (string.IsNullOrWhiteSpace(txt_pay_date.Text))
             txt_pay_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
 
@@ -237,23 +237,48 @@ public partial class Account_Ledger : Page
         return amt;
     }
 
-    private void SetPaymentLabels(string accountType)
+    private void SetEntryLabels(string accountType)
     {
+        lbl_add_payment_btn.Text = "Add entry";
+        lbl_payment_modal_title.Text = "Add ledger entry";
+
         if (accountType == "PARTY")
         {
-            lbl_add_payment_btn.Text = "Receive payment";
-            lbl_payment_modal_title.Text = "Party payment received";
+            lbl_dir_debit.Text = "Add due (Debit)";
+            lbl_dir_credit.Text = "Receive payment (Credit)";
+            hf_default_dr.Value = "C";
+            rb_entry_debit.Checked = false;
+            rb_entry_credit.Checked = true;
         }
         else if (accountType == "JOBWORK")
         {
-            lbl_add_payment_btn.Text = "Pay jobwork";
-            lbl_payment_modal_title.Text = "Jobwork payment";
+            lbl_dir_debit.Text = "Make payment (Debit)";
+            lbl_dir_credit.Text = "Add due (Credit)";
+            hf_default_dr.Value = "D";
+            rb_entry_debit.Checked = true;
+            rb_entry_credit.Checked = false;
         }
         else
         {
-            lbl_add_payment_btn.Text = "Pay staff";
-            lbl_payment_modal_title.Text = "Staff payment";
+            lbl_dir_debit.Text = "Make payment (Debit)";
+            lbl_dir_credit.Text = "Add due (Credit)";
+            hf_default_dr.Value = "D";
+            rb_entry_debit.Checked = true;
+            rb_entry_credit.Checked = false;
         }
+    }
+
+    private string GetSelectedDrCr()
+    {
+        if (rb_entry_debit.Checked) return "D";
+        if (rb_entry_credit.Checked) return "C";
+        return "";
+    }
+
+    private static bool IsPaymentDirection(string accountType, string drCr)
+    {
+        if (accountType == "PARTY") return drCr == "C";
+        return drCr == "D";
     }
 
     private string GetSelectedPaymentMode()
@@ -271,7 +296,16 @@ public partial class Account_Ledger : Page
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(GetSelectedPaymentMode()))
+        string drCr = GetSelectedDrCr();
+        if (string.IsNullOrEmpty(drCr))
+        {
+            ShowMsg("Select entry type (Debit or Credit).", Msg.Warning);
+            return;
+        }
+
+        string accountType = ddl_account_type.SelectedValue;
+        bool isPayment = IsPaymentDirection(accountType, drCr);
+        if (isPayment && string.IsNullOrWhiteSpace(GetSelectedPaymentMode()))
         {
             ShowMsg("Select payment mode (Cash or Online).", Msg.Warning);
             return;
@@ -286,19 +320,20 @@ public partial class Account_Ledger : Page
 
         if (string.IsNullOrWhiteSpace(txt_pay_date.Text))
         {
-            ShowMsg("Select payment date.", Msg.Warning);
+            ShowMsg("Select date.", Msg.Warning);
             return;
         }
 
         string by = Session["user_id"].ToString();
         DataSet ds = BAL_Account.ins_ledger_payment(
-            ddl_account_type.SelectedValue,
+            accountType,
             ddl_account.SelectedValue,
             txt_pay_date.Text,
             txt_pay_ref.Text,
             txt_pay_note.Text,
             amt.ToString(CultureInfo.InvariantCulture),
-            GetSelectedPaymentMode(),
+            isPayment ? GetSelectedPaymentMode() : "",
+            drCr,
             by);
 
         if (ds != null && ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0)
@@ -311,6 +346,7 @@ public partial class Account_Ledger : Page
                 txt_pay_note.Text = "";
                 rb_pay_cash.Checked = false;
                 rb_pay_online.Checked = false;
+                SetEntryLabels(accountType);
                 BindLedger();
                 ScriptManager.RegisterStartupScript(this, GetType(), "closePayModal",
                     "var el=document.getElementById('modal_payment'); if(el&&window.bootstrap){ var m=bootstrap.Modal.getInstance(el); if(m) m.hide(); }", true);
