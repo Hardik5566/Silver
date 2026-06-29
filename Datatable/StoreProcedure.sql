@@ -2016,10 +2016,98 @@ BEGIN
 
         IF @has_out = 1
         BEGIN
+            DECLARE @hdrParty BIGINT;
+            SELECT @hdrParty = party_id FROM dbo.tbl_inward_challan WHERE inward_id = @id;
+
+            DECLARE @newLines TABLE (
+                part_id BIGINT NOT NULL,
+                qty INT NOT NULL,
+                rate DECIMAL(18, 2) NOT NULL
+            );
+
+            SET @p = @part_ids;
+            SET @q = @qtys;
+            SET @r = ISNULL(@rates, N'');
+
+            WHILE LEN(@p) > 0 AND CHARINDEX(N',', @p) > 0
+            BEGIN
+                SET @segP = LEFT(@p, CHARINDEX(N',', @p) - 1);
+                SET @segQ = LEFT(@q, CHARINDEX(N',', @q) - 1);
+                SET @segR = CASE WHEN LEN(@r) > 0 AND CHARINDEX(N',', @r) > 0
+                    THEN LEFT(@r, CHARINDEX(N',', @r) - 1) ELSE N'0' END;
+
+                SET @p = SUBSTRING(@p, CHARINDEX(N',', @p) + 1, 8000);
+                SET @q = SUBSTRING(@q, CHARINDEX(N',', @q) + 1, 8000);
+                IF LEN(@r) > 0 AND CHARINDEX(N',', @r) > 0 SET @r = SUBSTRING(@r, CHARINDEX(N',', @r) + 1, 8000);
+
+                IF LTRIM(RTRIM(@segP)) = N'' BREAK;
+
+                SET @partId = CAST(@segP AS BIGINT);
+                SET @qty = CAST(@segQ AS INT);
+                SET @rate = CAST(@segR AS DECIMAL(18, 2));
+
+                IF @qty <= 0 CONTINUE;
+
+                IF NOT EXISTS (
+                    SELECT 1 FROM dbo.tbl_part_master
+                    WHERE part_id = @partId AND CAST(party_id AS BIGINT) = @hdrParty AND status = 1)
+                BEGIN
+                    SELECT 'False' AS Success, N'Part does not belong to party or inactive.' AS Message;
+                    RETURN;
+                END
+
+                INSERT INTO @newLines (part_id, qty, rate) VALUES (@partId, @qty, @rate);
+            END
+
+            IF EXISTS (
+                SELECT 1
+                FROM dbo.tbl_inward_challan_details AS d
+                INNER JOIN @newLines AS n ON n.part_id = d.part_id
+                WHERE d.inward_id = @id AND d.status = 1 AND n.qty < d.qty_out_done)
+            BEGIN
+                SELECT 'False' AS Success, N'Quantity cannot be less than already outward qty.' AS Message;
+                RETURN;
+            END
+
+            IF EXISTS (
+                SELECT 1
+                FROM dbo.tbl_inward_challan_details AS d
+                WHERE d.inward_id = @id AND d.status = 1 AND d.qty_out_done > 0
+                    AND NOT EXISTS (SELECT 1 FROM @newLines AS n WHERE n.part_id = d.part_id))
+            BEGIN
+                SELECT 'False' AS Success, N'Cannot remove a line that has outward qty.' AS Message;
+                RETURN;
+            END
+
+            BEGIN TRANSACTION;
+
             UPDATE dbo.tbl_inward_challan
             SET challan_no = @cn, inward_date = @d, remarks = @remarks, modify_by = @uid, modify_date = dbo.get_date()
             WHERE inward_id = @id;
-            SELECT 'True' AS Success, N'Updated header only (outward exists — lines locked).' AS Message, @id AS inward_id;
+
+            UPDATE d
+            SET qty_inward = n.qty,
+                rate_at_time = n.rate,
+                modify_by = @uid,
+                modify_date = dbo.get_date()
+            FROM dbo.tbl_inward_challan_details AS d
+            INNER JOIN @newLines AS n ON n.part_id = d.part_id
+            WHERE d.inward_id = @id AND d.status = 1;
+
+            INSERT INTO dbo.tbl_inward_challan_details (inward_id, part_id, qty_inward, qty_out_done, rate_at_time, status, create_by, create_date)
+            SELECT @id, n.part_id, n.qty, 0, n.rate, 1, @uid, dbo.get_date()
+            FROM @newLines AS n
+            WHERE NOT EXISTS (
+                SELECT 1 FROM dbo.tbl_inward_challan_details AS d
+                WHERE d.inward_id = @id AND d.part_id = n.part_id AND d.status = 1);
+
+            DELETE d
+            FROM dbo.tbl_inward_challan_details AS d
+            WHERE d.inward_id = @id AND d.status = 1 AND d.qty_out_done = 0
+                AND NOT EXISTS (SELECT 1 FROM @newLines AS n WHERE n.part_id = d.part_id);
+
+            COMMIT TRANSACTION;
+            SELECT 'True' AS Success, N'Updated.' AS Message, @id AS inward_id;
             RETURN;
         END
 
@@ -2175,6 +2263,35 @@ BEGIN
     BEGIN CATCH
         SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
     END CATCH
+END
+GO
+
+IF OBJECT_ID('dbo.sel_outward_for_edit_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sel_outward_for_edit_sp;
+GO
+CREATE PROCEDURE dbo.sel_outward_for_edit_sp
+    @outward_history_id NVARCHAR(50)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @hid BIGINT = CAST(@outward_history_id AS BIGINT);
+
+    SELECT
+        oh.outward_history_id,
+        oh.outward_date,
+        ISNULL(oh.slip_no, N'') AS slip_no,
+        oh.qty_out,
+        ISNULL(oh.remarks, N'') AS remarks,
+        h.challan_no,
+        p.party_name,
+        pm.part_name,
+        d.qty_inward - d.qty_out_done AS qty_pending,
+        oh.qty_out + (d.qty_inward - d.qty_out_done) AS qty_max
+    FROM dbo.tbl_outward_history AS oh
+    INNER JOIN dbo.tbl_inward_challan_details AS d ON d.inward_detail_id = oh.inward_detail_id AND d.status = 1
+    INNER JOIN dbo.tbl_inward_challan AS h ON h.inward_id = d.inward_id AND h.status = 1
+    INNER JOIN dbo.tbl_party_master AS p ON p.party_id = h.party_id AND p.status = 1
+    INNER JOIN dbo.tbl_part_master AS pm ON pm.part_id = d.part_id AND pm.status = 1
+    WHERE oh.outward_history_id = @hid AND oh.status = 1;
 END
 GO
 
@@ -3992,5 +4109,70 @@ BEGIN
     BEGIN CATCH
         SELECT 'False' AS Success, ERROR_MESSAGE() AS Message;
     END CATCH
+END
+GO
+
+/* Backfill tbl_account_transaction for invoices saved before ledger sync existed. */
+IF OBJECT_ID('dbo.sync_missing_invoice_account_txn_sp', 'P') IS NOT NULL DROP PROCEDURE dbo.sync_missing_invoice_account_txn_sp;
+GO
+CREATE PROCEDURE dbo.sync_missing_invoice_account_txn_sp
+    @invoice_nos NVARCHAR(MAX) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @filter TABLE (invoice_no NVARCHAR(50) NOT NULL PRIMARY KEY);
+    DECLARE @p NVARCHAR(MAX) = LTRIM(RTRIM(ISNULL(@invoice_nos, N'')));
+    DECLARE @seg NVARCHAR(50);
+
+    IF LEN(@p) > 0
+    BEGIN
+        IF RIGHT(@p, 1) <> N',' SET @p = @p + N',';
+        WHILE CHARINDEX(N',', @p) > 0
+        BEGIN
+            SET @seg = LTRIM(RTRIM(LEFT(@p, CHARINDEX(N',', @p) - 1)));
+            SET @p = SUBSTRING(@p, CHARINDEX(N',', @p) + 1, 8000);
+            IF LEN(@seg) > 0 AND NOT EXISTS (SELECT 1 FROM @filter WHERE invoice_no = @seg)
+                INSERT INTO @filter (invoice_no) VALUES (@seg);
+        END
+    END
+
+    INSERT INTO dbo.tbl_account_transaction (
+        txn_date, txn_type, account_type, account_id, title, dr_cr, amount,
+        ref_no, note, payment_mode, source_type, source_id,
+        status, create_by, create_date
+    )
+    SELECT
+        CAST(i.invoice_date AS DATE),
+        N'PARTY_INVOICE',
+        N'PARTY',
+        i.party_id,
+        NULL,
+        N'D',
+        i.grand_total,
+        i.invoice_no,
+        i.remarks,
+        NULL,
+        N'INVOICE',
+        i.invoice_id,
+        1,
+        COALESCE(i.create_by, 1),
+        COALESCE(i.create_date, dbo.get_date())
+    FROM dbo.tbl_invoice AS i
+    WHERE i.status = 1
+      AND NOT EXISTS (
+        SELECT 1
+        FROM dbo.tbl_account_transaction AS t
+        WHERE t.source_type = N'INVOICE'
+          AND t.source_id = i.invoice_id
+          AND t.status = 1)
+      AND (
+        NOT EXISTS (SELECT 1 FROM @filter)
+        OR EXISTS (SELECT 1 FROM @filter AS f WHERE f.invoice_no = i.invoice_no)
+      );
+
+    SELECT
+        N'True' AS Success,
+        CAST(@@ROWCOUNT AS NVARCHAR(20)) + N' party invoice ledger row(s) created.' AS Message;
 END
 GO

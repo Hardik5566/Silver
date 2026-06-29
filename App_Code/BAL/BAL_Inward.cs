@@ -96,6 +96,14 @@ public class BAL_Inward
         return command.ExtQueryDS(cmd);
     }
 
+    public static DataSet get_outward_for_edit(string outward_history_id)
+    {
+        SqlCommand cmd = new SqlCommand { CommandText = "sel_outward_for_edit_sp" };
+        parameter p = new parameter();
+        cmd.Parameters.Add(p.stringparam("@outward_history_id", outward_history_id));
+        return command.ExtQueryDS(cmd);
+    }
+
     public static DataSet upd_outward_history(string outward_history_id, string qty_out, string slip_no, string remarks, string by)
     {
         SqlCommand cmd = new SqlCommand { CommandText = "upd_outward_history_sp" };

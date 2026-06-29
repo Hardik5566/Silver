@@ -58,6 +58,12 @@
         .aled-sum-box .hint { font-size: 11px; color: #6c757d; margin-top: 4px; }
         .bal-recv { color: #198754; }
         .bal-pay { color: #dc3545; }
+        .bal-dr { color: #198754; }
+        .bal-cr { color: #dc3545; }
+        .bal-zero { color: #6c757d; }
+        .amt-dr { color: #198754; font-weight: 500; }
+        .amt-cr { color: #dc3545; font-weight: 500; }
+        .amt-empty { color: #adb5bd; }
         .sum-debit .val { color: #212529; }
         .sum-credit .val { color: #495057; }
         .aled-summary-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #dee2e6; background: #f8f9fa; }
@@ -129,20 +135,20 @@
                         <asp:BoundField DataField="ref_no" HeaderText="Ref no" ItemStyle-CssClass="text-muted" NullDisplayText="—" />
                         <asp:BoundField DataField="note" HeaderText="Note" ItemStyle-CssClass="text-break" NullDisplayText="—" />
                         <asp:TemplateField HeaderText="Debit" ItemStyle-CssClass="mono text-end" HeaderStyle-CssClass="text-end">
-                            <ItemTemplate>₹<%# FormatAmt(Eval("debit_amt")) %></ItemTemplate>
+                            <ItemTemplate><span class='<%# GetDebitCss(Eval("debit_amt")) %>'><%# FormatDebitCredit(Eval("debit_amt")) %></span></ItemTemplate>
                             <FooterTemplate>
                                 <span class="fw-semibold">₹<asp:Label ID="lbl_foot_debit" runat="server" /></span>
                             </FooterTemplate>
                         </asp:TemplateField>
                         <asp:TemplateField HeaderText="Credit" ItemStyle-CssClass="mono text-end" HeaderStyle-CssClass="text-end">
-                            <ItemTemplate>₹<%# FormatAmt(Eval("credit_amt")) %></ItemTemplate>
+                            <ItemTemplate><span class='<%# GetCreditCss(Eval("credit_amt")) %>'><%# FormatDebitCredit(Eval("credit_amt")) %></span></ItemTemplate>
                             <FooterTemplate>
                                 <span class="fw-semibold">₹<asp:Label ID="lbl_foot_credit" runat="server" /></span>
                             </FooterTemplate>
                         </asp:TemplateField>
                         <asp:TemplateField HeaderText="Balance" ItemStyle-CssClass="mono text-end fw-semibold" HeaderStyle-CssClass="text-end">
                             <ItemTemplate>
-                                <span class='<%# GetBalanceCss() %>'>₹<%# FormatBalance(Eval("running_balance")) %></span>
+                                <span class='<%# GetLineBalanceCss(Eval("debit_amt"), Eval("credit_amt"), Eval("running_balance")) %>'>₹<%# FormatBalance(Eval("running_balance")) %></span>
                             </ItemTemplate>
                             <FooterTemplate>
                                 <span class="fw-semibold"><asp:Label ID="lbl_foot_balance" runat="server" CssClass="" /></span>

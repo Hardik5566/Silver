@@ -47,6 +47,7 @@ public partial class Inward_Challan_Entry : Page
         if (!IsPostBack)
         {
             BindParty();
+            BindQuickUnit();
             if (!string.IsNullOrEmpty(id))
             {
                 lit_page_title.Text = "Edit challan";
@@ -125,6 +126,113 @@ public partial class Inward_Challan_Entry : Page
             foreach (DataRow r in ds.Tables[0].Rows)
                 ddl_party.Items.Add(new ListItem(r["party_name"].ToString(), r["party_id"].ToString()));
         }
+    }
+
+    private void BindQuickUnit()
+    {
+        ddl_quick_unit.Items.Clear();
+        ddl_quick_unit.Items.Add(new ListItem("-- Select unit --", "0"));
+        DataSet ds = BAL_Part.dis_unit();
+        if (ds.Tables.Count > 0)
+        {
+            foreach (DataRow r in ds.Tables[0].Rows)
+                ddl_quick_unit.Items.Add(new ListItem(r["unit_name"].ToString(), r["unit_id"].ToString()));
+        }
+    }
+
+    private List<InwardLineVm> GetLinesFromPage()
+    {
+        List<InwardLineVm> lineList = ParseLinesFromJson(hd_lines_json.Value);
+        if (lineList == null || lineList.Count == 0)
+        {
+            SyncLinesFromRepeater();
+            lineList = Lines;
+        }
+        return lineList;
+    }
+
+    protected void btn_quick_part_save_Click(object sender, EventArgs e)
+    {
+        List<InwardLineVm> lineList = GetLinesFromPage();
+
+        if (ddl_party.SelectedValue == "0")
+        {
+            ShowMsg("Select party first.", Msg.Warning);
+            Lines = lineList;
+            BindRepeater();
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(txt_quick_part_name.Text))
+        {
+            ShowMsg("Enter part name.", Msg.Warning);
+            Lines = lineList;
+            BindRepeater();
+            return;
+        }
+        if (ddl_quick_unit.SelectedValue == "0")
+        {
+            ShowMsg("Select unit.", Msg.Warning);
+            Lines = lineList;
+            BindRepeater();
+            return;
+        }
+
+        string rateStr = string.IsNullOrWhiteSpace(txt_quick_rate.Text.Trim()) ? "0" : txt_quick_rate.Text.Trim();
+        string taxStr = string.IsNullOrWhiteSpace(txt_quick_tax.Text.Trim()) ? "0" : txt_quick_tax.Text.Trim();
+        string by = Session["user_id"].ToString();
+
+        DataSet ds = BAL_Part.ins_part(ddl_party.SelectedValue, txt_quick_part_name.Text.Trim(),
+            ddl_quick_unit.SelectedValue, rateStr, taxStr, by);
+
+        if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+        {
+            ShowMsg("No response from server. Try again.", Msg.Error);
+            Lines = lineList;
+            BindRepeater();
+            return;
+        }
+
+        DataRow res = ds.Tables[0].Rows[0];
+        if (res["Success"].ToString().ToLower() != "true")
+        {
+            ShowMsg(res["Message"].ToString(), Msg.Warning);
+            Lines = lineList;
+            BindRepeater();
+            ScriptManager.RegisterStartupScript(this, GetType(), "qpmerr", "inwardOpenQuickPartModal(null);", true);
+            return;
+        }
+
+        if (!ds.Tables[0].Columns.Contains("ID"))
+        {
+            ShowMsg("Part saved but could not select it. Refresh the page.", Msg.Warning);
+            Lines = lineList;
+            BindRepeater();
+            return;
+        }
+
+        string newPartId = res["ID"].ToString();
+        int rowIdx;
+        if (!int.TryParse(hd_quick_target_row.Value, out rowIdx) || rowIdx < 0)
+            rowIdx = 0;
+        if (lineList.Count == 0)
+            lineList.Add(new InwardLineVm());
+        if (rowIdx >= lineList.Count)
+            rowIdx = lineList.Count - 1;
+
+        lineList[rowIdx].PartId = newPartId;
+        lineList[rowIdx].Rate = rateStr;
+        Lines = lineList;
+        BindRepeater();
+
+        txt_quick_part_name.Text = "";
+        txt_quick_rate.Text = "";
+        txt_quick_tax.Text = "0";
+
+        ShowMsg("Item added and selected on row " + (rowIdx + 1) + ".", Msg.Success);
+        ScriptManager.RegisterStartupScript(this, GetType(), "qpmfocus",
+            "setTimeout(function(){var body=document.getElementById('inward_line_body');" +
+            "if(!body)return;var rows=body.querySelectorAll('tr.inward-line-row');" +
+            "var tr=rows[" + rowIdx + "];if(!tr)return;var q=tr.querySelector('input.line-qty-inp');if(q)q.focus();},100);", true);
     }
 
     private void LoadForEdit(string inwardId)

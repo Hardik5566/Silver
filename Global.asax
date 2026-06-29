@@ -30,5 +30,12 @@
     {
         // Cannot read or write Session here — it is already unloaded. (Previous code that set Session keys was invalid.)
     }
+
+    void Application_PostAcquireRequestState(object sender, EventArgs e)
+    {
+        // Session is available here — restore login from cookie before any page checks Session["user_id"].
+        if (HttpContext.Current != null && HttpContext.Current.Session != null)
+            AuthHelper.RestoreSessionFromCookie(HttpContext.Current);
+    }
        
 </script>

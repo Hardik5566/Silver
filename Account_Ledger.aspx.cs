@@ -7,7 +7,7 @@ using System.Web.UI.WebControls;
 public partial class Account_Ledger : Page
 {
     private static readonly CultureInfo Ci = CultureInfo.GetCultureInfo("en-IN");
-    private bool _isPayableBalance;
+    private string _accountType = "PARTY";
 
     protected void Page_Load(object sender, EventArgs e)
     {
@@ -31,24 +31,71 @@ public partial class Account_Ledger : Page
         return ParseDecimal(value).ToString("N2", Ci);
     }
 
+    protected string FormatDebitCredit(object value)
+    {
+        decimal amt = ParseDecimal(value);
+        if (amt <= 0) return "—";
+        return "₹" + amt.ToString("N2", Ci);
+    }
+
+    protected string GetDebitCss(object value)
+    {
+        return ParseDecimal(value) > 0 ? "amt-dr" : "amt-empty";
+    }
+
+    protected string GetCreditCss(object value)
+    {
+        return ParseDecimal(value) > 0 ? "amt-cr" : "amt-empty";
+    }
+
     protected string FormatBalance(object value)
     {
-        return FormatBalanceAmount(ParseDecimal(value), _isPayableBalance);
+        return FormatBalanceAmount(ParseDecimal(value), _accountType);
     }
 
-    protected string GetBalanceCss()
+    protected string GetBalanceCss(object value)
     {
-        return _isPayableBalance ? "bal-pay" : "bal-recv";
+        return GetBalanceCssClass(ParseDecimal(value), _accountType);
     }
 
-    private static string FormatBalanceAmount(decimal balance, bool isPayable)
+    protected string GetLineBalanceCss(object debitAmt, object creditAmt, object runningBalance)
     {
-        return Math.Abs(balance).ToString("N2", Ci);
+        decimal debit = ParseDecimal(debitAmt);
+        decimal credit = ParseDecimal(creditAmt);
+        if (debit > 0) return "bal-dr";
+        if (credit > 0) return "bal-cr";
+        return GetBalanceCssClass(ParseDecimal(runningBalance), _accountType);
     }
 
-    private static string FormatBalanceMoney(decimal balance, bool isPayable)
+    private static bool IsDebitBalance(decimal balance, string accountType)
     {
-        return "₹" + FormatBalanceAmount(balance, isPayable);
+        if (balance == 0) return false;
+        return accountType == "PARTY" ? balance > 0 : balance < 0;
+    }
+
+    private static string GetBalanceLabel(decimal balance, string accountType)
+    {
+        if (balance == 0) return "";
+        bool isDebit = IsDebitBalance(balance, accountType);
+        return isDebit ? "Dr" : "Cr";
+    }
+
+    private static string GetBalanceCssClass(decimal balance, string accountType)
+    {
+        if (balance == 0) return "bal-zero";
+        return IsDebitBalance(balance, accountType) ? "bal-dr" : "bal-cr";
+    }
+
+    private static string FormatBalanceAmount(decimal balance, string accountType)
+    {
+        if (balance == 0) return "0.00";
+        string suffix = GetBalanceLabel(balance, accountType);
+        return Math.Abs(balance).ToString("N2", Ci) + " " + suffix;
+    }
+
+    private static string FormatBalanceMoney(decimal balance, string accountType)
+    {
+        return "₹" + FormatBalanceAmount(balance, accountType);
     }
 
     private void ApplyQueryString()
@@ -141,7 +188,7 @@ public partial class Account_Ledger : Page
         string typeLabel = header["account_type_label"].ToString();
         string accName = header["account_name"].ToString();
         string balLabel = header["balance_label"].ToString();
-        _isPayableBalance = balLabel == "Payable";
+        _accountType = header["account_type"].ToString();
         decimal totalDebit = ParseDecimal(header["period_debit"]);
         decimal totalCredit = ParseDecimal(header["period_credit"]);
         decimal balance = ParseDecimal(header["closing_balance"]);
@@ -149,8 +196,8 @@ public partial class Account_Ledger : Page
         lbl_account_title.Text = typeLabel + " — " + accName;
         lbl_total_debit.Text = "₹" + totalDebit.ToString("N2", Ci);
         lbl_total_credit.Text = "₹" + totalCredit.ToString("N2", Ci);
-        lbl_balance.Text = FormatBalanceMoney(balance, _isPayableBalance);
-        lbl_balance.CssClass = _isPayableBalance ? "bal-pay" : "bal-recv";
+        lbl_balance.Text = FormatBalanceMoney(balance, _accountType);
+        lbl_balance.CssClass = GetBalanceCssClass(balance, _accountType);
         lbl_balance_hint.Text = balLabel;
         pnl_summary.Visible = true;
         SetPaymentLabels(ddl_account_type.SelectedValue);
@@ -171,8 +218,8 @@ public partial class Account_Ledger : Page
             if (lblC != null) lblC.Text = totalCredit.ToString("N2", Ci);
             if (lblB != null)
             {
-                lblB.Text = FormatBalanceMoney(balance, _isPayableBalance);
-                lblB.CssClass = _isPayableBalance ? "bal-pay" : "bal-recv";
+                lblB.Text = FormatBalanceMoney(balance, _accountType);
+                lblB.CssClass = GetBalanceCssClass(balance, _accountType);
             }
         }
         else if (grid_ledger.FooterRow != null)
