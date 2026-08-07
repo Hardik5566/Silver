@@ -131,7 +131,12 @@
 
             </div>
 
-            <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal_mexp" onclick="resetMexpModalAdd();">+ Add expense</button>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modal_mexp" onclick="resetMexpModalAdd('expense');">+ Add expense</button>
+                <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modal_mexp" onclick="resetMexpModalAdd('income');">+ Add income</button>
+            </div>
+
+            <asp:HiddenField ID="hd_entry_kind" runat="server" Value="expense" />
 
             <asp:HiddenField ID="hd_staff_expense_id" runat="server" />
 
@@ -381,7 +386,7 @@
 
                         <div class="col-12">
 
-                            <label class="form-label">Expense date</label>
+                            <label class="form-label"><asp:Label ID="lbl_date_caption" runat="server" Text="Expense date" /></label>
 
                             <asp:TextBox ID="txt_expense_date" runat="server" CssClass="form-control" TextMode="Date"></asp:TextBox>
 
@@ -399,7 +404,33 @@
 
                             <label class="form-label">Note</label>
 
-                            <asp:TextBox ID="txt_note" runat="server" CssClass="form-control" TextMode="MultiLine" Rows="2" placeholder="What did you buy?"></asp:TextBox>
+                            <asp:TextBox ID="txt_note" runat="server" CssClass="form-control" TextMode="MultiLine" Rows="2" placeholder="Details"></asp:TextBox>
+
+                        </div>
+
+                        <div class="col-12" id="pnl_payment_mode" style="display: none;">
+
+                            <label class="form-label d-block">Payment mode</label>
+
+                            <div class="d-flex flex-wrap gap-4 mt-1">
+
+                                <div class="form-check m-0 d-flex align-items-center">
+
+                                    <asp:RadioButton ID="rb_pay_cash" runat="server" GroupName="mexp_pay_mode" CssClass="form-check-input" />
+
+                                    <asp:Label runat="server" AssociatedControlID="rb_pay_cash" CssClass="form-check-label ms-1 mb-0">Cash</asp:Label>
+
+                                </div>
+
+                                <div class="form-check m-0 d-flex align-items-center">
+
+                                    <asp:RadioButton ID="rb_pay_online" runat="server" GroupName="mexp_pay_mode" CssClass="form-check-input" />
+
+                                    <asp:Label runat="server" AssociatedControlID="rb_pay_online" CssClass="form-check-label ms-1 mb-0">Online</asp:Label>
+
+                                </div>
+
+                            </div>
 
                         </div>
 
@@ -431,7 +462,11 @@
 
     <script type="text/javascript">
 
-        function resetMexpModalAdd() {
+        function resetMexpModalAdd(kind) {
+
+            kind = (kind === 'income') ? 'income' : 'expense';
+
+            var hKind = document.getElementById('<%= hd_entry_kind.ClientID %>');
 
             var hId = document.getElementById('<%= hd_staff_expense_id.ClientID %>');
 
@@ -439,15 +474,25 @@
 
             var lbl = document.getElementById('<%= lbl_modal_title.ClientID %>');
 
+            var lblDate = document.getElementById('<%= lbl_date_caption.ClientID %>');
+
             var btn = document.getElementById('<%= btn_save.ClientID %>');
+
+            var pnlPm = document.getElementById('pnl_payment_mode');
+
+            if (hKind) hKind.value = kind;
 
             if (hId) hId.value = '';
 
             if (hAct) hAct.value = 'save';
 
-            if (lbl) lbl.innerText = 'Add expense';
+            if (lbl) lbl.innerText = (kind === 'income') ? 'Add income' : 'Add expense';
+
+            if (lblDate) lblDate.innerText = (kind === 'income') ? 'Income date' : 'Expense date';
 
             if (btn) btn.value = 'Save';
+
+            if (pnlPm) pnlPm.style.display = (kind === 'income') ? '' : 'none';
 
             var d = new Date();
 
@@ -468,6 +513,14 @@
             var amt = document.getElementById('<%= txt_amount.ClientID %>');
 
             if (amt) amt.value = '';
+
+            var cash = document.getElementById('<%= rb_pay_cash.ClientID %>');
+
+            var online = document.getElementById('<%= rb_pay_online.ClientID %>');
+
+            if (cash) cash.checked = false;
+
+            if (online) online.checked = false;
 
         }
 

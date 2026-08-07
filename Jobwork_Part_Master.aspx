@@ -78,7 +78,10 @@
                     <div class="row g-3">
                         <div class="col-md-12">
                             <label class="form-label">Jobwork party</label>
-                            <asp:DropDownList ID="ddl_jobwork_party" CssClass="form-select" runat="server"></asp:DropDownList>
+                            <div class="d-flex gap-1">
+                                <asp:DropDownList ID="ddl_jobwork_party" CssClass="form-select" runat="server"></asp:DropDownList>
+                                <button type="button" class="btn btn-sm btn-outline-success flex-shrink-0" id="btn_quick_jw_party" title="Add new jobwork party" aria-label="Add new jobwork party">+</button>
+                            </div>
                             <span id="jw_party_Error" class="text-danger"></span>
                         </div>
                         <div class="col-md-12">
@@ -103,6 +106,47 @@
                 <div class="modal_form_footer">
                     <button type="button" class="btn btn-danger" data-bs-dismiss="modal" style="width: 49%">Cancel</button>
                     <asp:Button ID="btn_save" runat="server" OnClick="btn_save_Click" OnClientClick="return validateJwPart();" CssClass="btn btn-primary" Style="width: 49%" Text="Submit" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modal_quick_jw_party" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-success text-white">
+                    <h2 class="modal-title fs-5 mb-0">New jobwork party</h2>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Party name <span class="text-danger">*</span></label>
+                            <asp:TextBox ID="txt_quick_jw_party_name" runat="server" CssClass="form-control" placeholder="Party name"></asp:TextBox>
+                            <span id="jw_quick_name_Error" class="text-danger"></span>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Contact person</label>
+                            <asp:TextBox ID="txt_quick_jw_contact" runat="server" CssClass="form-control"></asp:TextBox>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Mobile</label>
+                            <asp:TextBox ID="txt_quick_jw_mobile" runat="server" CssClass="form-control"></asp:TextBox>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">GST no</label>
+                            <asp:TextBox ID="txt_quick_jw_gst" runat="server" CssClass="form-control"></asp:TextBox>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Address</label>
+                            <asp:TextBox ID="txt_quick_jw_address" runat="server" CssClass="form-control" TextMode="MultiLine" Rows="2"></asp:TextBox>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal_form_footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="width: 49%">Cancel</button>
+                    <asp:Button ID="btn_quick_jw_party_save" runat="server" CssClass="btn btn-success" Style="width: 49%" Text="Save &amp; use party"
+                        OnClick="btn_quick_jw_party_save_Click" OnClientClick="return validateQuickJwParty();" CausesValidation="false" />
                 </div>
             </div>
         </div>
@@ -139,10 +183,32 @@
                 $("#<%= txt_tax_per.ClientID%>").val("0");
                 $("#<%= ddl_jobwork_party.ClientID%>, #<%= ddl_unit.ClientID%>").val("0");
             });
+
+            $("#btn_quick_jw_party").click(function () { openQuickJwPartyModal(); });
+            $("#modal_quick_jw_party").on("hidden.bs.modal", function () { showJwModal(); });
         });
         function showJwModal() {
             var el = document.getElementById("modal_jw_part");
             if (el && window.bootstrap) new bootstrap.Modal(el).show();
+        }
+        function openQuickJwPartyModal() {
+            $("#jw_quick_name_Error").text("");
+            $("#<%= txt_quick_jw_party_name.ClientID %>, #<%= txt_quick_jw_contact.ClientID %>, #<%= txt_quick_jw_mobile.ClientID %>, #<%= txt_quick_jw_gst.ClientID %>, #<%= txt_quick_jw_address.ClientID %>").val("");
+            var jwEl = document.getElementById("modal_jw_part");
+            var jwModal = jwEl && window.bootstrap ? bootstrap.Modal.getInstance(jwEl) : null;
+            if (jwModal) jwModal.hide();
+            var el = document.getElementById("modal_quick_jw_party");
+            if (el && window.bootstrap) new bootstrap.Modal(el).show();
+            setTimeout(function () { $("#<%= txt_quick_jw_party_name.ClientID %>").trigger("focus"); }, 300);
+        }
+        function validateQuickJwParty() {
+            var name = $("#<%= txt_quick_jw_party_name.ClientID %>").val();
+            $("#jw_quick_name_Error").text("");
+            if (!name || name.trim() === "") {
+                $("#jw_quick_name_Error").text("Party name is required.");
+                return false;
+            }
+            return true;
         }
     </script>
 </asp:Content>

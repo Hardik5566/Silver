@@ -100,6 +100,63 @@ public partial class Jobwork_Part_Master : Page
         }
     }
 
+    protected void btn_quick_jw_party_save_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            string by = Session["user_id"].ToString();
+            DataSet ds = BAL_JobworkParty.ins_jobwork_party(
+                txt_quick_jw_party_name.Text.Trim(),
+                txt_quick_jw_contact.Text.Trim(),
+                txt_quick_jw_mobile.Text.Trim(),
+                txt_quick_jw_address.Text.Trim(),
+                txt_quick_jw_gst.Text.Trim(),
+                by);
+
+            if (ds == null || ds.Tables.Count == 0 || ds.Tables[0].Rows.Count == 0)
+            {
+                ShowMessage("No response from server. Try again.", MessageType.Error);
+                ScriptManager.RegisterStartupScript(this, GetType(), "reopenQuickJwParty", "openQuickJwPartyModal();", true);
+                return;
+            }
+
+            DataRow res = ds.Tables[0].Rows[0];
+            if (res["Success"].ToString().ToLower() != "true")
+            {
+                ShowMessage(res["Message"].ToString(), MessageType.Warning);
+                ScriptManager.RegisterStartupScript(this, GetType(), "reopenQuickJwParty", "openQuickJwPartyModal();", true);
+                return;
+            }
+
+            string newPartyId = ds.Tables[0].Columns.Contains("ID") ? res["ID"].ToString() : "";
+            AddAndSelectJobworkPartyOption(newPartyId, txt_quick_jw_party_name.Text.Trim());
+
+            txt_quick_jw_party_name.Text = "";
+            txt_quick_jw_contact.Text = "";
+            txt_quick_jw_mobile.Text = "";
+            txt_quick_jw_gst.Text = "";
+            txt_quick_jw_address.Text = "";
+
+            ShowMessage(res["Message"].ToString(), MessageType.Success);
+            ScriptManager.RegisterStartupScript(this, GetType(), "reopenJwPartModal", "showJwModal();", true);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(ex.Message, MessageType.Error);
+            ScriptManager.RegisterStartupScript(this, GetType(), "reopenQuickJwParty", "openQuickJwPartyModal();", true);
+        }
+    }
+
+    private void AddAndSelectJobworkPartyOption(string partyId, string partyName)
+    {
+        if (string.IsNullOrEmpty(partyId)) return;
+        if (ddl_jobwork_party.Items.FindByValue(partyId) == null)
+            ddl_jobwork_party.Items.Add(new ListItem(partyName, partyId));
+        ddl_jobwork_party.SelectedValue = partyId;
+        if (ddl_filter_jobwork_party.Items.FindByValue(partyId) == null)
+            ddl_filter_jobwork_party.Items.Add(new ListItem(partyName, partyId));
+    }
+
     protected void grid_jw_part_RowCommand(object sender, GridViewCommandEventArgs e)
     {
         string id = e.CommandArgument.ToString();

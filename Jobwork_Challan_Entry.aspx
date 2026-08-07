@@ -16,6 +16,10 @@
         .w-act { width: 72px; text-align: center; }
         .line-amt { font-weight: 600; color: #0d6efd; }
         .jobwork-tfoot td { background: #e7f1ff; font-weight: 600; border-top: 2px solid #0d6efd; }
+        .line-part-wrap { display: flex; gap: 4px; align-items: center; }
+        .line-part-wrap .line-part-ddl { flex: 1 1 auto; min-width: 0; }
+        .line-new-part-btn { flex: 0 0 auto; padding: 2px 7px; line-height: 1.2; }
+        .quick-part-modal .modal-content { border: none; border-radius: 12px; overflow: hidden; }
     </style>
 </asp:Content>
 <asp:Content ID="c3" ContentPlaceHolderID="body" runat="server">
@@ -70,7 +74,10 @@
                             <tr class="jobwork-line-row">
                                 <td class="w-sr text-muted line-sr"><%# Container.ItemIndex + 1 %></td>
                                 <td>
-                                    <asp:DropDownList ID="ddl_line_part" runat="server" CssClass="form-select form-select-sm line-part-ddl"></asp:DropDownList>
+                                    <div class="line-part-wrap">
+                                        <asp:DropDownList ID="ddl_line_part" runat="server" CssClass="form-select form-select-sm line-part-ddl"></asp:DropDownList>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary line-new-part-btn" title="Add new item" aria-label="Add new item">+</button>
+                                    </div>
                                 </td>
                                 <td class="w-qty">
                                     <asp:TextBox ID="txt_line_qty" runat="server" CssClass="form-control form-control-sm line-qty-inp" Text='<%# Eval("Qty") %>'></asp:TextBox>
@@ -95,13 +102,52 @@
                 </tfoot>
             </table>
         </div>
-        <div class="px-3 py-2 border-top bg-light">
+        <div class="px-3 py-2 border-top bg-light d-flex flex-wrap gap-2">
             <button type="button" class="btn btn-sm btn-outline-primary" id="btn_add_row" accesskey="a">+ Add row</button>
+            <button type="button" class="btn btn-sm btn-outline-success" id="btn_quick_part" title="Add new item to this jobwork party">+ New item</button>
         </div>
     </div>
 
     <asp:HiddenField ID="hd_jobwork_challan_id" runat="server" />
     <asp:HiddenField ID="hd_lines_json" runat="server" ClientIDMode="Static" Value="" />
+    <asp:HiddenField ID="hd_quick_target_row" runat="server" ClientIDMode="Static" Value="0" />
+
+    <div class="modal fade quick-part-modal" id="modal_quick_part" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header bg-success text-white">
+                    <h2 class="modal-title fs-5 mb-0">New item</h2>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Jobwork party: <strong id="sp_quick_party_name"></strong></p>
+                    <div class="mb-3">
+                        <label class="form-label">Part name <span class="text-danger">*</span></label>
+                        <asp:TextBox ID="txt_quick_part_name" runat="server" CssClass="form-control" placeholder="Item name"></asp:TextBox>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Unit <span class="text-danger">*</span></label>
+                        <asp:DropDownList ID="ddl_quick_unit" runat="server" CssClass="form-select"></asp:DropDownList>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">Rate (₹)</label>
+                            <asp:TextBox ID="txt_quick_rate" runat="server" CssClass="form-control" placeholder="0"></asp:TextBox>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Tax (%)</label>
+                            <asp:TextBox ID="txt_quick_tax" runat="server" CssClass="form-control" Text="0"></asp:TextBox>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <asp:Button ID="btn_quick_part_save" runat="server" CssClass="btn btn-success" Text="Save &amp; use item"
+                        OnClick="btn_quick_part_save_Click" OnClientClick="return jobworkBeforeQuickPartSave();" CausesValidation="false" />
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center">
         <asp:Button ID="btn_save" runat="server" CssClass="btn btn-primary px-4" Text="Save challan" OnClick="btn_save_Click" OnClientClick="return jobworkBeforeSave();" AccessKey="s" />
@@ -233,11 +279,17 @@
                         jobworkRemoveLine(el);
                         return;
                     }
+                    if (el.tagName === 'BUTTON' && el.classList && el.classList.contains('line-new-part-btn')) {
+                        jobworkOpenQuickPartModal(el);
+                        return;
+                    }
                     el = el.parentElement;
                 }
             });
             var addBtn = document.getElementById('btn_add_row');
             if (addBtn) addBtn.addEventListener('click', jobworkCloneLineRow);
+            var quickBtn = document.getElementById('btn_quick_part');
+            if (quickBtn) quickBtn.addEventListener('click', function () { jobworkOpenQuickPartModal(null); });
             body.querySelectorAll('tr.jobwork-line-row').forEach(function (tr) { jobworkRecalcLine(tr); });
             jobworkRenumberRows();
         }
@@ -259,6 +311,60 @@
         }
         function jobworkBeforeSave() {
             jobworkGatherLinesToHidden();
+            return true;
+        }
+        function jobworkGetPartyDdl() {
+            return document.getElementById('<%= ddl_jobwork_party.ClientID %>');
+        }
+        function jobworkLineRowIndex(tr) {
+            var body = document.getElementById('jobwork_line_body');
+            if (!body || !tr) return 0;
+            var rows = body.querySelectorAll('tr.jobwork-line-row');
+            for (var i = 0; i < rows.length; i++) if (rows[i] === tr) return i;
+            return 0;
+        }
+        function jobworkOpenQuickPartModal(fromBtn) {
+            var partyDdl = jobworkGetPartyDdl();
+            if (!partyDdl || partyDdl.value === '0') {
+                alert('Select jobwork party first.');
+                if (partyDdl) partyDdl.focus();
+                return;
+            }
+            var tr = fromBtn ? jobworkClosestTr(fromBtn) : null;
+            var body = document.getElementById('jobwork_line_body');
+            if (!tr && body) {
+                var rows = body.querySelectorAll('tr.jobwork-line-row');
+                tr = rows.length ? rows[rows.length - 1] : null;
+            }
+            var idx = jobworkLineRowIndex(tr);
+            var hd = document.getElementById('hd_quick_target_row');
+            if (hd) hd.value = String(idx);
+            var sp = document.getElementById('sp_quick_party_name');
+            if (sp) sp.textContent = partyDdl.options[partyDdl.selectedIndex].text;
+            var el = document.getElementById('modal_quick_part');
+            if (el && window.bootstrap) new bootstrap.Modal(el).show();
+            var nm = document.getElementById('<%= txt_quick_part_name.ClientID %>');
+            if (nm) { nm.value = ''; nm.focus(); }
+        }
+        function jobworkBeforeQuickPartSave() {
+            jobworkGatherLinesToHidden();
+            var partyDdl = jobworkGetPartyDdl();
+            if (!partyDdl || partyDdl.value === '0') {
+                alert('Select jobwork party first.');
+                return false;
+            }
+            var nm = document.getElementById('<%= txt_quick_part_name.ClientID %>');
+            if (!nm || !nm.value.trim()) {
+                alert('Enter part name.');
+                if (nm) nm.focus();
+                return false;
+            }
+            var unit = document.getElementById('<%= ddl_quick_unit.ClientID %>');
+            if (!unit || unit.value === '0') {
+                alert('Select unit.');
+                if (unit) unit.focus();
+                return false;
+            }
             return true;
         }
         if (window.jQuery) { jQuery(jobworkBindLineTable); } else { document.addEventListener('DOMContentLoaded', jobworkBindLineTable); }

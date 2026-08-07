@@ -50,13 +50,21 @@ public partial class My_Expense : Page
 
 
 
-    private static void ShowMexpModal(Page page)
+    private static void ShowMexpModal(Page page, bool showPaymentMode)
 
     {
 
+        string showPm = showPaymentMode ? "''" : "'none'";
+
         ScriptManager.RegisterStartupScript(page, page.GetType(), "showMexpModal",
 
-            "var el=document.getElementById('modal_mexp'); if(el&&window.bootstrap){ bootstrap.Modal.getOrCreateInstance(el).show(); }", true);
+            "var el=document.getElementById('modal_mexp');" +
+
+            "var pnl=document.getElementById('pnl_payment_mode');" +
+
+            "if(pnl) pnl.style.display=" + showPm + ";" +
+
+            "if(el&&window.bootstrap){ bootstrap.Modal.getOrCreateInstance(el).show(); }", true);
 
     }
 
@@ -89,6 +97,8 @@ public partial class My_Expense : Page
             txt_expense_date.Text = DateTime.Today.ToString("yyyy-MM-dd");
 
             hd_action.Value = "save";
+
+            hd_entry_kind.Value = "expense";
 
             BindGrid();
 
@@ -422,57 +432,35 @@ public partial class My_Expense : Page
 
             hd_staff_expense_id.Value = id;
 
+            hd_entry_kind.Value = "expense";
+
             hd_action.Value = "upd";
 
             lbl_modal_title.Text = "Edit expense";
+
+            lbl_date_caption.Text = "Expense date";
 
             btn_save.Text = "Update";
 
 
 
-            DateTime ed = DateTime.Today;
-
-            object od = r["expense_date"];
-
-            if (od != DBNull.Value)
-
-            {
-
-                if (od is DateTime)
-
-                    ed = (DateTime)od;
-
-                else if (!DateTime.TryParse(od.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out ed))
-
-                    DateTime.TryParse(od.ToString(), out ed);
-
-            }
-
-            txt_expense_date.Text = ed.ToString("yyyy-MM-dd");
+            txt_expense_date.Text = FormatDateForInput(r["expense_date"]);
 
             txt_ref_no.Text = r["ref_no"] != DBNull.Value ? r["ref_no"].ToString() : "";
 
             txt_note.Text = r["note"] != DBNull.Value ? r["note"].ToString() : "";
 
-
-
-            decimal amt = 0;
-
-            object oa = r["amount"];
-
-            if (oa is decimal)
-
-                amt = (decimal)oa;
-
-            else
-
-                decimal.TryParse(oa.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out amt);
-
-            txt_amount.Text = amt.ToString(CultureInfo.InvariantCulture);
+            txt_amount.Text = ParseRowAmount(r["amount"]);
 
 
 
-            ShowMexpModal(this);
+            rb_pay_cash.Checked = false;
+
+            rb_pay_online.Checked = false;
+
+
+
+            ShowMexpModal(this, false);
 
             return;
 
@@ -534,9 +522,33 @@ public partial class My_Expense : Page
 
         {
 
-            ShowMsg("Select expense date.", Msg.Warning);
+            ShowMsg(hd_entry_kind.Value == "income" ? "Select income date." : "Select expense date.", Msg.Warning);
 
             return;
+
+        }
+
+
+
+        bool isIncome = string.Equals(hd_entry_kind.Value, "income", StringComparison.OrdinalIgnoreCase);
+
+        string paymentMode = "";
+
+        if (isIncome)
+
+        {
+
+            paymentMode = GetSelectedPaymentMode();
+
+            if (string.IsNullOrEmpty(paymentMode))
+
+            {
+
+                ShowMsg("Select payment mode (Cash or Online).", Msg.Warning);
+
+                return;
+
+            }
 
         }
 
@@ -550,7 +562,33 @@ public partial class My_Expense : Page
 
         DataSet ds;
 
-        if (isUpd)
+        if (isIncome)
+
+        {
+
+            ds = BAL_Account.ins_ledger_payment(
+
+                "STAFF",
+
+                MyUserId,
+
+                txt_expense_date.Text,
+
+                txt_ref_no.Text,
+
+                txt_note.Text,
+
+                amtStr,
+
+                paymentMode,
+
+                "D",
+
+                MyUserId);
+
+        }
+
+        else if (isUpd)
 
         {
 
@@ -614,19 +652,7 @@ public partial class My_Expense : Page
 
                 ShowMsg(ds.Tables[0].Rows[0]["Message"].ToString(), Msg.Success);
 
-                txt_ref_no.Text = "";
-
-                txt_note.Text = "";
-
-                txt_amount.Text = "";
-
-                hd_staff_expense_id.Value = "";
-
-                hd_action.Value = "save";
-
-                lbl_modal_title.Text = "Add expense";
-
-                btn_save.Text = "Save";
+                ResetModalAfterSave();
 
                 BindGrid();
 
@@ -641,6 +667,86 @@ public partial class My_Expense : Page
                 ShowMsg(ds.Tables[0].Rows[0]["Message"].ToString(), Msg.Warning);
 
         }
+
+    }
+
+
+
+    private void ResetModalAfterSave()
+
+    {
+
+        txt_ref_no.Text = "";
+
+        txt_note.Text = "";
+
+        txt_amount.Text = "";
+
+        hd_staff_expense_id.Value = "";
+
+        hd_action.Value = "save";
+
+        hd_entry_kind.Value = "expense";
+
+        lbl_modal_title.Text = "Add expense";
+
+        lbl_date_caption.Text = "Expense date";
+
+        btn_save.Text = "Save";
+
+        rb_pay_cash.Checked = false;
+
+        rb_pay_online.Checked = false;
+
+    }
+
+
+
+    private string GetSelectedPaymentMode()
+
+    {
+
+        if (rb_pay_cash.Checked) return "Cash";
+
+        if (rb_pay_online.Checked) return "Online";
+
+        return "";
+
+    }
+
+
+
+    private static string FormatDateForInput(object value)
+
+    {
+
+        if (value == null || value == DBNull.Value)
+
+            return DateTime.Today.ToString("yyyy-MM-dd");
+
+        DateTime d;
+
+        if (value is DateTime)
+
+            d = (DateTime)value;
+
+        else if (!DateTime.TryParse(value.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
+
+            DateTime.TryParse(value.ToString(), out d);
+
+        return d.ToString("yyyy-MM-dd");
+
+    }
+
+
+
+    private static string ParseRowAmount(object value)
+
+    {
+
+        decimal amt = ParseDecimal(value);
+
+        return amt.ToString(CultureInfo.InvariantCulture);
 
     }
 
